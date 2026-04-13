@@ -101,13 +101,16 @@ export async function requireAuth(request: FastifyRequest, reply: FastifyReply) 
             }
 
             // Verify with Supabase (handles token format automatically)
+            request.log.info({ token: token.substring(0, 10) + '...' }, '🔐 Verifying JWT Token...');
             const authResult = await supabaseAdmin.auth.getUser(token);
 
             if (authResult.error || !authResult.data?.user) {
                 const msg = authResult.error?.message || 'Unknown auth error';
+                request.log.error({ authError: msg }, '❌ JWT Verification Failed');
                 const isExpired = msg.toLowerCase().includes('expired');
                 throw new Error(isExpired ? 'AUTH_EXPIRED' : 'AUTH_INVALID');
             }
+            request.log.info({ userId: authResult.data.user.id }, '✅ JWT Verified. Checking Admin profile...');
 
             // Fetch role from profiles table for authorization
             const { data: profile } = await supabaseAdmin

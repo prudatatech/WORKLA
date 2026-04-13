@@ -121,6 +121,7 @@ export default async function adminRoutes(fastifyInstance: FastifyInstance) {
     } as const;
 
     fastify.get('/dashboard', { schema: dashboardSchema }, async (request, reply) => {
+        request.log.info({ userId: (request.user as any)?.id }, '📊 Fetching Admin Dashboard...');
         try {
             const startOfDay = new Date();
             startOfDay.setHours(0, 0, 0, 0);

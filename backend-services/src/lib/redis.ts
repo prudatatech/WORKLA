@@ -145,6 +145,9 @@ export const redis = {
     // while the connection is temporarily down instead of failing instantly.
     _subscriberClient: null as IORedis | null,
     getSubscriber: function () {
+        if (!config.REDIS_URL || config.REDIS_URL.includes('localhost')) {
+            return { on: () => {}, once: () => {}, subscribe: () => {}, unsubscribe: () => {} } as any;
+        }
         if (this._subscriberClient) return this._subscriberClient;
         const sub = new IORedis(REDIS_URL, {
             maxRetriesPerRequest: null,
