@@ -403,6 +403,9 @@ async function startServer() {
             });
 
             const responseBody = await upstreamRes.text();
+            if (!responseBody) {
+                return reply.send();
+            }
             return reply.send(responseBody);
         } catch (err: any) {
             server.log.error(`[Proxy ❌] ${upstreamUrl} failed: ${err.message}`);
