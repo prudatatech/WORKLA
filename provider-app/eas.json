@@ -1,0 +1,26 @@
+{
+    "build": {
+        "development": {
+            "developmentClient": true,
+            "distribution": "internal"
+        },
+        "preview": {
+            "distribution": "internal",
+            "channel": "preview",
+            "android": {
+                "buildType": "apk"
+            },
+            "env": {
+                "EXPO_PUBLIC_SUPABASE_URL": "https://backend.workla.in/supabase",
+                "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2Zm1nbXZyYXJpd3l5eG9odXZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NTcxNDksImV4cCI6MjA4ODEzMzE0OX0.G2uAABNXDNHxRZ2c6DqI0TDOt5eAplQC44a55dZygv0",
+                "EXPO_PUBLIC_API_URL": "https://backend.workla.in"
+            }
+        },
+        "production": {
+            "channel": "production"
+        }
+    },
+    "submit": {
+        "production": {}
+    }
+}
