@@ -348,9 +348,10 @@ async function startServer() {
     server.log.info('📦 Registering Supabase Reverse Proxy at /supabase...');
 
     const supabaseProxyHandler = async (req: any, reply: any) => {
-        // Strip both /supabase and /api/v1/supabase prefixes
-        const upstreamPath = req.url.replace(/^\/api\/v1\/supabase/, '').replace(/^\/supabase/, '');
-        const upstreamUrl = `${config.SUPABASE_URL}${upstreamPath}`;
+        // Strip prefixes and trim leading slashes to prevent double-slashes
+        const cleanedPath = req.url.replace(/^\/api\/v1\/supabase/, '').replace(/^\/supabase/, '').replace(/^\/+/, '');
+        const baseUrl = config.SUPABASE_URL.replace(/\/$/, ''); // Remove trailing slash if exists
+        const upstreamUrl = `${baseUrl}/${cleanedPath}`;
 
         const forwardHeaders: Record<string, string> = {};
         for (const [key, value] of Object.entries(req.headers as Record<string, string>)) {
@@ -363,7 +364,8 @@ async function startServer() {
                 !lowerKey.startsWith('cf-') &&
                 !lowerKey.startsWith('x-forwarded-')
             ) {
-                forwardHeaders[key] = value;
+                // Ensure values are strings
+                forwardHeaders[key] = String(value);
             }
         }
 
