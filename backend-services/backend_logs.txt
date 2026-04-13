@@ -1,0 +1,42 @@
+
+> backend-services@1.0.0 start
+> node dist/server.js
+
+⚠️  Node.js 18 and below are deprecated and will no longer be supported in future versions of @supabase/supabase-js. Please upgrade to Node.js 20 or later. For more information, visit: https://github.com/orgs/supabase/discussions/37217
+{"level":30,"time":1773215909380,"pid":18,"hostname":"607c2ad6a244","msg":"Server listening at http://127.0.0.1:8015"}
+🤖 Notification Worker started. Listening for events...
+[EventBus Mock 🎧] Subscribed to booking.created
+[EventBus Mock 🎧] Subscribed to payment.received
+🔎 Search Sync Worker started. Listening for provider events...
+[EventBus Mock 🎧] Subscribed to provider.location_updated
+[EventBus Mock 🎧] Subscribed to provider.profile_updated
+🌍 Location Worker: Listening for GPS updates...
+[EventBus Mock 🎧] Subscribed to provider.location_updated
+{"level":30,"time":1773215909380,"pid":18,"hostname":"607c2ad6a244","msg":"Server listening at http://172.19.0.3:8015"}
+{"level":30,"time":1773215909380,"pid":18,"hostname":"607c2ad6a244","msg":"🚀 HTTP API Gateway running on port 8015"}
+{"level":30,"time":1773215909423,"pid":18,"hostname":"607c2ad6a244","msg":"🔗 Socket.io running in single-node mode (Redis adapter skipped)"}
+{"level":30,"time":1773215909423,"pid":18,"hostname":"607c2ad6a244","msg":"🚀 High-Frequency WebSocket Engine Initialized"}
+[Elasticsearch ⚠️] Could not initialize (Is ES running at http://localhost:9200?): ConnectionError: connect ECONNREFUSED ::1:9200
+    at SniffingTransport._request (/app/node_modules/@elastic/transport/lib/Transport.js:610:31)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /app/node_modules/@elastic/transport/lib/Transport.js:670:32
+    at async SniffingTransport.request (/app/node_modules/@elastic/transport/lib/Transport.js:666:20)
+    at async Indices.exists (/app/node_modules/@elastic/elasticsearch/lib/api/api/indices.js:585:16)
+    at async initializeElasticsearch (/app/dist/lib/elasticsearch.js:59:24)
+    at async startServer (/app/dist/server.js:138:9) {
+  options: { redaction: { type: 'replace', additionalKeys: [] } },
+  meta: {
+    body: undefined,
+    statusCode: 0,
+    headers: {},
+    meta: {
+      context: null,
+      request: [Object],
+      name: 'elasticsearch-js',
+      connection: [Object],
+      attempts: 3,
+      aborted: false
+    },
+    warnings: null
+  }
+}

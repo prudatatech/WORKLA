@@ -1,0 +1,30 @@
+--- SUPABASE DISPATCH CHECK ---
+
+2. Pending requested bookings:
+[]
+
+3. Providers locations:
+null
+
+4. Recent job offers:
+[]
+
+5. Provider Locations Table:
+[
+  {
+    "provider_id": "990ec0cf-f786-4c8b-ae96-20b8060cd448",
+    "latitude": 12.8183463,
+    "longitude": 77.5153096,
+    "heading": null,
+    "speed": null,
+    "recorded_at": "2026-03-05T19:03:29.669+00:00"
+  },
+  {
+    "provider_id": "14900651-067f-4b5c-82a7-f63c3932c4a9",
+    "latitude": 12.8183342,
+    "longitude": 77.5153886,
+    "heading": null,
+    "speed": null,
+    "recorded_at": "2026-03-07T10:35:30.167+00:00"
+  }
+]

@@ -1,0 +1,19 @@
+
+> backend-services@1.0.0 start
+> node dist/server.js
+
+⚠️  Node.js 18 and below are deprecated and will no longer be supported in future versions of @supabase/supabase-js. Please upgrade to Node.js 20 or later. For more information, visit: https://github.com/orgs/supabase/discussions/37217
+{"level":30,"time":1773219771984,"pid":18,"hostname":"5823bc358941","msg":"Server listening at http://127.0.0.1:8000"}
+🤖 Notification Worker started. Listening for events...
+[EventBus Mock 🎧] Subscribed to booking.created
+[EventBus Mock 🎧] Subscribed to payment.received
+🔎 Search Sync Worker started. Listening for provider events...
+[EventBus Mock 🎧] Subscribed to provider.location_updated
+[EventBus Mock 🎧] Subscribed to provider.profile_updated
+🌍 Location Worker: Listening for GPS updates...
+[EventBus Mock 🎧] Subscribed to provider.location_updated
+{"level":30,"time":1773219771985,"pid":18,"hostname":"5823bc358941","msg":"Server listening at http://172.19.0.3:8000"}
+{"level":30,"time":1773219771985,"pid":18,"hostname":"5823bc358941","msg":"🚀 HTTP API Gateway running on port 8000"}
+{"level":30,"time":1773219772026,"pid":18,"hostname":"5823bc358941","msg":"🔗 Socket.io running in single-node mode (Redis adapter skipped)"}
+{"level":30,"time":1773219772026,"pid":18,"hostname":"5823bc358941","msg":"🚀 High-Frequency WebSocket Engine Initialized"}
+[Elasticsearch 🔎] Connected. Index 'providers' already exists.

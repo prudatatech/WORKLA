@@ -1,0 +1,4 @@
+src/routes/provider.ts(341,31): error TS2345: Argument of type 'PromiseLike<any>' is not assignable to parameter of type 'Promise<any>'.
+  Type 'PromiseLike<any>' is missing the following properties from type 'Promise<any>': catch, finally, [Symbol.toStringTag]
+src/routes/provider.ts(347,31): error TS2345: Argument of type 'PromiseLike<any>' is not assignable to parameter of type 'Promise<any>'.
+  Type 'PromiseLike<any>' is missing the following properties from type 'Promise<any>': catch, finally, [Symbol.toStringTag]

@@ -1,0 +1,11 @@
+# EAS Build ignore file
+# This overrides .gitignore for EAS builds
+
+# Standard ignores
+node_modules/
+.expo/
+web-build/
+dist/
+
+# Do NOT ignore .env files - they are needed for the build
+# (This overrides the .gitignore which excludes .env)

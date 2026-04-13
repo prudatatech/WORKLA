@@ -1,0 +1,32 @@
+# Expo / React Native .gitignore
+node_modules/
+.expo/
+dist/
+npm-debug.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+expo-env.d.ts
+
+# macOS
+.DS_Store
+*.pem
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# iOS / Android native (If ejected or prebuild)
+ios/build/
+ios/Pods/
+ios/Index/
+android/app/build/
+android/.gradle
+android/build/
+android/local.properties

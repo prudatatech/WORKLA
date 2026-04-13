@@ -1,0 +1,6 @@
+{
+  "code": "23503",
+  "details": "Key (booking_id)=(bc7c2350-16ad-4aa0-8f7d-1c0a258796cd) is not present in table \"bookings_old\".",
+  "hint": null,
+  "message": "insert or update on table \"worker_earnings\" violates foreign key constraint \"worker_earnings_booking_id_fkey\""
+}

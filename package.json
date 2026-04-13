@@ -1,0 +1,29 @@
+{
+  "name": "work-la-monorepo",
+  "private": true,
+  "workspaces": [
+    "backend-services",
+    "admin-portal",
+    "customer-app",
+    "provider-app",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "npm run build --prefix backend-services",
+    "start": "npm start --prefix backend-services"
+  },
+  "devDependencies": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "overrides": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": {
+      "react": "19.1.0"
+    }
+  }
+}

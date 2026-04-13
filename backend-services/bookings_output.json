@@ -1,0 +1,37 @@
+[
+  {
+    "id": "0b5f8c25-7171-4532-b4e6-7a8a39dc109a",
+    "status": "confirmed",
+    "provider_id": "14900651-067f-4b5c-82a7-f63c3932c4a9",
+    "customer_id": "50dac14f-8df4-4f39-ba67-002ef18fd2f0",
+    "scheduled_date": "2026-03-12"
+  },
+  {
+    "id": "b559dc4e-6cde-4cb5-8c8d-e17bbcaa9982",
+    "status": "confirmed",
+    "provider_id": "14900651-067f-4b5c-82a7-f63c3932c4a9",
+    "customer_id": "50dac14f-8df4-4f39-ba67-002ef18fd2f0",
+    "scheduled_date": "2026-03-11"
+  },
+  {
+    "id": "c45664a9-1787-4a59-80e8-cd82eb649646",
+    "status": "confirmed",
+    "provider_id": "14900651-067f-4b5c-82a7-f63c3932c4a9",
+    "customer_id": "50dac14f-8df4-4f39-ba67-002ef18fd2f0",
+    "scheduled_date": "2026-03-11"
+  },
+  {
+    "id": "83f859b4-3d40-48e3-8e07-87a1f259d570",
+    "status": "requested",
+    "provider_id": null,
+    "customer_id": "50dac14f-8df4-4f39-ba67-002ef18fd2f0",
+    "scheduled_date": "2026-03-11"
+  },
+  {
+    "id": "872928ec-0954-40e3-842a-a1841465ed0d",
+    "status": "requested",
+    "provider_id": null,
+    "customer_id": "50dac14f-8df4-4f39-ba67-002ef18fd2f0",
+    "scheduled_date": "2026-03-11"
+  }
+]

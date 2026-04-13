@@ -1,0 +1,23 @@
+#service logo code:
+car booking :- cbk0,
+electrician booking :- ecn0,
+plumber booking :- plbr0,
+cleaning booking :- clng0,
+paint :- pntr0,
+carpentry :- cptr0,
+moving :- pkgsft0,
+Pest contr. :- pst0,
+Gardening :- grdn0,
+Security :- sct0,
+HVAC :- hvac0,
+More :- mr0,
+
+#popular services logo code :
+cleaning and maintainance :- ppclng0,
+driving and transport :- ppcbk0,
+construction workers :- ppcnstrc0,
+households :- pphhld0,
+
+#smart suggestion grid code :
+festival light :- ssftvlecn0,
+festival cleaning :- ssftvlclng0,

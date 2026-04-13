@@ -1,0 +1,9 @@
+--- SUPABASE DISPATCH CHECK 2 ---
+
+1. All recent bookings:
+[]
+
+2. Providers (any):
+[]
+
+3. match_provider_v2 exists?: Could not find the function public.match_provider_v2(p_booking_id, p_radius_km) in the schema cache

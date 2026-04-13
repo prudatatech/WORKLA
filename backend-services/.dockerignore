@@ -1,0 +1,13 @@
+node_modules
+dist
+*.sql
+*.md
+.git
+.env*
+backend_logs.txt
+fix_rpc.sql
+clean_fix_rpc.sql
+Dockerfile
+docker-compose.yml
+nginx
+.dockerignore

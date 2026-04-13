@@ -1,0 +1,112 @@
+[
+  {
+    "booking": {
+      "id": "bd2c6054-154c-4825-9d8a-99e05036eb15",
+      "booking_number": "WK-MMV3IP1V",
+      "status": "searching",
+      "provider_id": null,
+      "customer_id": "50dac14f-8df4-4f39-ba67-002ef18fd2f0",
+      "created_at": "2026-03-17T20:59:46.388226+00:00"
+    },
+    "offers": [
+      {
+        "id": "32d81c06-3cfb-43e5-8300-3c84fdf42b5d",
+        "booking_id": "bd2c6054-154c-4825-9d8a-99e05036eb15",
+        "provider_id": "14900651-067f-4b5c-82a7-f63c3932c4a9",
+        "status": "pending",
+        "distance_km": 1.45089578613438,
+        "offered_at": "2026-03-17T20:59:46.676076+00:00",
+        "expires_at": "2026-03-17T21:29:46.676076+00:00",
+        "responded_at": null
+      }
+    ]
+  },
+  {
+    "booking": {
+      "id": "bc7c2350-16ad-4aa0-8f7d-1c0a258796cd",
+      "booking_number": "WK-MMV2T33G",
+      "status": "searching",
+      "provider_id": null,
+      "customer_id": "50dac14f-8df4-4f39-ba67-002ef18fd2f0",
+      "created_at": "2026-03-17T20:39:51.565157+00:00"
+    },
+    "offers": [
+      {
+        "id": "82505f51-57dd-4005-a9e6-b548a65502c1",
+        "booking_id": "bc7c2350-16ad-4aa0-8f7d-1c0a258796cd",
+        "provider_id": "14900651-067f-4b5c-82a7-f63c3932c4a9",
+        "status": "expired",
+        "distance_km": 1.44602186474165,
+        "offered_at": "2026-03-17T20:39:51.883894+00:00",
+        "expires_at": "2026-03-17T21:09:51.883894+00:00",
+        "responded_at": "2026-03-17T21:02:18.798+00:00"
+      }
+    ]
+  },
+  {
+    "booking": {
+      "id": "d4a0247a-9072-4fb8-8ad8-af4c8f926d9a",
+      "booking_number": "WK-MMTP2JAL",
+      "status": "searching",
+      "provider_id": null,
+      "customer_id": "50dac14f-8df4-4f39-ba67-002ef18fd2f0",
+      "created_at": "2026-03-16T21:27:34.036748+00:00"
+    },
+    "offers": [
+      {
+        "id": "b5f27e92-330e-475c-8517-b0eb94c3aa5d",
+        "booking_id": "d4a0247a-9072-4fb8-8ad8-af4c8f926d9a",
+        "provider_id": "14900651-067f-4b5c-82a7-f63c3932c4a9",
+        "status": "expired",
+        "distance_km": 0.00425623644876402,
+        "offered_at": "2026-03-16T21:27:34.319996+00:00",
+        "expires_at": "2026-03-16T21:57:34.319996+00:00",
+        "responded_at": "2026-03-17T13:47:58.142+00:00"
+      }
+    ]
+  },
+  {
+    "booking": {
+      "id": "1111f4c2-734b-44fd-aad4-2ce8525e340b",
+      "booking_number": "WK-MMTOTM41",
+      "status": "requested",
+      "provider_id": null,
+      "customer_id": "50dac14f-8df4-4f39-ba67-002ef18fd2f0",
+      "created_at": "2026-03-16T21:20:37.808367+00:00"
+    },
+    "offers": []
+  },
+  {
+    "booking": {
+      "id": "258a1ffc-2a08-40a7-a757-1b07acc90138",
+      "booking_number": "WK-MMTO8YDW",
+      "status": "requested",
+      "provider_id": null,
+      "customer_id": "50dac14f-8df4-4f39-ba67-002ef18fd2f0",
+      "created_at": "2026-03-16T21:04:33.953951+00:00"
+    },
+    "offers": []
+  },
+  {
+    "booking": {
+      "id": "dc01e43a-436d-421b-8d18-6c45051aa367",
+      "booking_number": "WK-MMTNUKJS",
+      "status": "requested",
+      "provider_id": null,
+      "customer_id": "50dac14f-8df4-4f39-ba67-002ef18fd2f0",
+      "created_at": "2026-03-16T20:53:22.860681+00:00"
+    },
+    "offers": []
+  },
+  {
+    "booking": {
+      "id": "978d86a5-7c4e-43c9-9648-fcccd8a88b88",
+      "booking_number": "WK-MMTNTKXE",
+      "status": "requested",
+      "provider_id": null,
+      "customer_id": "50dac14f-8df4-4f39-ba67-002ef18fd2f0",
+      "created_at": "2026-03-16T20:52:36.690572+00:00"
+    },
+    "offers": []
+  }
+]
