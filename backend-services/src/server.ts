@@ -376,7 +376,7 @@ async function startServer() {
             ? (Buffer.isBuffer(req.body) || typeof req.body === 'string' ? req.body : JSON.stringify(req.body))
             : undefined;
 
-        server.log.debug(`[Proxy 🔄] → ${req.method} ${upstreamUrl}`);
+        server.log.info(`[Proxy 🔄] → ${req.method} ${upstreamUrl}`);
 
         try {
             const upstreamRes = await fetch(upstreamUrl, {
@@ -384,6 +384,8 @@ async function startServer() {
                 headers: forwardHeaders,
                 body: bodyToSend,
             });
+
+            server.log.info(`[Proxy 🟢] ← ${upstreamRes.status} from ${upstreamUrl}`);
 
             // Forward response status, but prevent Cloudflare from injecting HTML on 502/503/504
             let safeStatus = upstreamRes.status;
