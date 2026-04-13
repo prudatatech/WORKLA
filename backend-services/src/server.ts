@@ -348,7 +348,8 @@ async function startServer() {
     server.log.info('📦 Registering Supabase Reverse Proxy at /supabase...');
 
     const supabaseProxyHandler = async (req: any, reply: any) => {
-        const upstreamPath = req.url.replace(/^\/supabase/, '');
+        // Strip both /supabase and /api/v1/supabase prefixes
+        const upstreamPath = req.url.replace(/^\/api\/v1\/supabase/, '').replace(/^\/supabase/, '');
         const upstreamUrl = `${config.SUPABASE_URL}${upstreamPath}`;
 
         const forwardHeaders: Record<string, string> = {};
@@ -409,9 +410,11 @@ async function startServer() {
         }
     };
 
-    // Register proxy for all HTTP methods
+    // Register proxy for all HTTP methods (Both root and api/v1 prefixes)
     server.all('/supabase', supabaseProxyHandler);
     server.all('/supabase/*', supabaseProxyHandler);
+    server.all('/api/v1/supabase', supabaseProxyHandler);
+    server.all('/api/v1/supabase/*', supabaseProxyHandler);
 
     // ── 5. Register Microservice Routes ─────────────────
     server.log.info('📦 Registering microservice routes...');

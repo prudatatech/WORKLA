@@ -4,7 +4,13 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as TaskManager from 'expo-task-manager';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert } from 'react-native';
+import { Platform } from 'react-native';
+import { Buffer } from 'buffer';
+
+// Fix for react-native-svg / lucide-react-native buffer dependency
+if (typeof global.Buffer === 'undefined') {
+  global.Buffer = Buffer;
+}
 import 'react-native-reanimated';
 import { supabase } from '../lib/supabase';
 import { socketService } from '../lib/socket';

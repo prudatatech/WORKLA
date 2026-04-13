@@ -2,7 +2,13 @@ import * as SplashScreen from 'expo-splash-screen';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, Platform } from 'react-native';
+import { Buffer } from 'buffer';
+
+// Fix for react-native-svg / lucide-react-native buffer dependency
+if (typeof global.Buffer === 'undefined') {
+  global.Buffer = Buffer;
+}
 import NetworkBanner from '../components/NetworkBanner';
 import InAppToast from '../components/InAppToast';
 import LoadingScreen from '../components/LoadingScreen';
