@@ -28,10 +28,7 @@ export default async function adminPayoutRoutes(fastifyInstance: FastifyInstance
         try {
             let query = supabaseAdmin
                 .from('payout_requests')
-                .select(`
-                    *,
-                    profiles:provider_id (full_name, phone, email)
-                `, { count: 'exact' });
+                .select('*', { count: 'exact' });
 
             if (status) {
                 query = query.eq('status', status);
@@ -43,7 +40,25 @@ export default async function adminPayoutRoutes(fastifyInstance: FastifyInstance
 
             if (error) throw error;
 
-            return reply.send({ success: true, count, data });
+            // Enrich with profile data (provider_id -> profiles)
+            const providerIds = [...new Set((data || []).map((p: any) => p.provider_id).filter(Boolean))];
+            let profilesMap: Record<string, any> = {};
+            if (providerIds.length > 0) {
+                const { data: profiles } = await supabaseAdmin
+                    .from('profiles')
+                    .select('id, full_name, phone, email')
+                    .in('id', providerIds);
+                if (profiles) {
+                    profilesMap = Object.fromEntries(profiles.map((p: any) => [p.id, p]));
+                }
+            }
+
+            const enriched = (data || []).map((payout: any) => ({
+                ...payout,
+                profiles: profilesMap[payout.provider_id] || null
+            }));
+
+            return reply.send({ success: true, count, data: enriched });
         } catch (err: any) {
             return reply.code(500).send({ error: 'Failed to fetch payout requests.', details: err.message });
         }
@@ -96,8 +111,7 @@ export default async function adminPayoutRoutes(fastifyInstance: FastifyInstance
                 .from('payout_requests')
                 .update({
                     status,
-                    remarks: remarks || null,
-                    processed_by: (request as any).user?.sub || null
+                    remarks: remarks || null
                 })
                 .eq('id', id);
 
