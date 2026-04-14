@@ -207,10 +207,18 @@ async function startServer() {
         origin: (origin: string | undefined, cb: (err: Error | null, allow: boolean) => void) => {
             // No origin = React Native / cURL / Postman — always allow
             if (!origin) return cb(null, true);
+
             // Browser origin — check against whitelist
             if (origins.includes(origin)) return cb(null, true);
+
+            // 🌐 Allow ALL local network IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x, etc.)
+            // This ensures login works from any local machine or WiFi network.
+            const isLocalNetwork = /^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|localhost|127\.0\.0\.1)/.test(origin);
+            if (isLocalNetwork) return cb(null, true);
+
             // In dev, allow everything
             if (isDev) return cb(null, true);
+
             // Default: block unknown browser origins
             cb(new Error(`CORS: Origin ${origin} not allowed`), false);
         },
