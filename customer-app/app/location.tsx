@@ -12,7 +12,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import MapView, { Region } from 'react-native-maps';
+import MapView, { PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 
@@ -147,6 +147,7 @@ export default function LocationScreen() {
             {/* The Map */}
             <MapView
                 ref={mapRef}
+                provider={PROVIDER_GOOGLE}
                 style={styles.map}
                 initialRegion={mapRegion}
                 showsUserLocation={true}

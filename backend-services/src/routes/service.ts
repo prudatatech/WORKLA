@@ -29,8 +29,9 @@ export default async function serviceRoutes(fastifyInstance: FastifyInstance) {
             const data = await cache.getOrSet(cacheKey, async () => {
                 let query = supabaseAdmin
                     .from('services')
-                    .select('id, name, slug, description, image_url, display_order', { count: 'exact' })
+                    .select('id, name, slug, description, image_url, display_order, priority_number', { count: 'exact' })
                     .eq('is_active', true)
+                    .order('priority_number', { ascending: true })
                     .order('display_order', { ascending: true })
                     .range(offset, offset + limit - 1);
 
@@ -41,10 +42,11 @@ export default async function serviceRoutes(fastifyInstance: FastifyInstance) {
                 const res = await query;
                 if (res.error) throw res.error;
                 
-                // Alias display_order to priority_number for frontend compatibility
+                // Robust mapping: ensure both fields are available for frontend
                 const mappedData = (res.data || []).map(s => ({
                     ...s,
-                    priority_number: s.display_order
+                    priority_number: s.priority_number ?? s.display_order ?? 0,
+                    display_order: s.display_order ?? s.priority_number ?? 0
                 }));
 
                 return { count: res.count, data: mappedData };
@@ -76,8 +78,9 @@ export default async function serviceRoutes(fastifyInstance: FastifyInstance) {
             const data = await cache.getOrSet(cacheKey, async () => {
                 const { data: allSubs, error } = await supabaseAdmin
                     .from('service_subcategories')
-                    .select('id, name, slug, description, image_url, service_id, base_price, display_order')
+                    .select('id, name, slug, description, image_url, service_id, base_price, display_order, priority_number')
                     .eq('is_active', true)
+                    .order('priority_number', { ascending: true, nullsFirst: false })
                     .order('display_order', { ascending: true, nullsFirst: false })
                     .limit(50);
 
@@ -85,7 +88,8 @@ export default async function serviceRoutes(fastifyInstance: FastifyInstance) {
                 
                 const mappedSubs = (allSubs || []).map(s => ({
                     ...s,
-                    priority_number: s.display_order
+                    priority_number: s.priority_number ?? s.display_order ?? 0,
+                    display_order: s.display_order ?? s.priority_number ?? 0
                 }));
 
                 const subs = mappedSubs;

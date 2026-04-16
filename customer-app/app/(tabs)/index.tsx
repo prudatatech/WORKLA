@@ -1,5 +1,5 @@
 import * as Location from 'expo-location';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -362,6 +362,14 @@ export default function HomeScreen() {
     const sub = AppState.addEventListener('change', handleAppStateChange);
     return () => sub.remove();
   }, [loadData, startPulseAnimation, subscribeToBookingUpdates]);
+
+  // Refresh data when screen comes into focus (e.g. after adding an address)
+  useFocusEffect(
+    useCallback(() => {
+      console.log('[Home] Screen focused — performing light refresh');
+      loadData();
+    }, [loadData])
+  );
 
   // Initial setup on mount
   useEffect(() => {

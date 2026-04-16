@@ -6,6 +6,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    InteractionManager,
     Modal,
     RefreshControl,
     ScrollView,
@@ -16,7 +17,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import MapView, { Region } from 'react-native-maps';
+import MapView, { PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import EmptyState from '../components/EmptyState';
 import { AddressRowSkeleton } from '../components/SkeletonLoader';
@@ -182,9 +183,13 @@ export default function AddressBookScreen() {
         setEditing(null); setLabel('Home'); setName(''); setFullAddress(''); setLandmark(''); setPinLocation(null);
         setMapReady(false); setMapError(false);
         setShowModal(true);
-        // Defer map rendering to avoid New Arch crash, then fetch location
-        setTimeout(() => { setMapReady(true); }, 500);
-        setTimeout(() => requestAndFetchLocation(), 600);
+        // Defer map rendering for better stability on New Arch & Modal transitions
+        InteractionManager.runAfterInteractions(() => {
+            setTimeout(() => { 
+                setMapReady(true);
+                requestAndFetchLocation();
+            }, 300);
+        });
     };
 
     const openEdit = (addr: Address) => {
@@ -197,7 +202,9 @@ export default function AddressBookScreen() {
             setPinLocation({ lat: addr.latitude, lng: addr.longitude });
         }
         setShowModal(true);
-        setTimeout(() => { setMapReady(true); }, 500);
+        InteractionManager.runAfterInteractions(() => {
+            setTimeout(() => { setMapReady(true); }, 300);
+        });
     };
 
     const save = async () => {
@@ -238,6 +245,25 @@ export default function AddressBookScreen() {
             }
 
             if (res.error) throw new Error(res.error);
+
+            // If the address was successfully saved, update the global store if it is the default address
+            if (res.data) {
+                const updatedAddr = {
+                    id: res.data.id,
+                    label: res.data.label,
+                    name: res.data.name,
+                    address: res.data.full_address,
+                    landmark: res.data.landmark || '',
+                    isDefault: res.data.is_default,
+                    latitude: res.data.latitude,
+                    longitude: res.data.longitude
+                };
+                
+                // If this is set as default, update the global store immediately
+                if (updatedAddr.isDefault) {
+                    setSelectedAddress(updatedAddr);
+                }
+            }
 
             setShowModal(false);
             fetchAddresses();
@@ -385,6 +411,7 @@ export default function AddressBookScreen() {
                                 <>
                                     <MapView
                                         ref={mapRef}
+                                        provider={PROVIDER_GOOGLE}
                                         style={s.miniMap}
                                         initialRegion={mapRegion}
                                         onRegionChange={() => setIsMoving(true)}

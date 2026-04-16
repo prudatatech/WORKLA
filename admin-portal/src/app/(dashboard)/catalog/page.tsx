@@ -125,10 +125,10 @@ export default function CatalogPage() {
         setSaving(false);
     };
 
-    const handleCreateSubcategory = async () => {
+    const handleSaveSubcategory = async () => {
         if (!subForm.name || !activeTargetId) return;
         setSaving(true);
-        const { error } = await adminApi.post('/api/v1/admin/subcategories', {
+        const payload = {
             service_id: activeTargetId,
             name: subForm.name,
             description: subForm.description,
@@ -141,11 +141,16 @@ export default function CatalogPage() {
             is_recommended: subForm.is_recommended,
             is_popular: subForm.is_popular,
             is_smart_pick: subForm.is_smart_pick
-        });
+        };
+
+        const { error } = editingSubId 
+            ? await adminApi.patch(`/api/v1/admin/subcategories/${editingSubId}`, payload)
+            : await adminApi.post('/api/v1/admin/subcategories', payload);
 
         if (!error) {
             await fetchCatalog();
             setIsSubformModalOpen(false);
+            setEditingSubId(null);
             setSubForm({
                 name: '',
                 description: '',
@@ -360,6 +365,31 @@ export default function CatalogPage() {
                                                 </button>
                                                 <button
                                                     onClick={() => {
+                                                        setActiveTargetId(srv.id);
+                                                        setEditingSubId(sub.id);
+                                                        setSubForm({
+                                                            ...subForm,
+                                                            name: sub.name,
+                                                            description: sub.description || '',
+                                                            base_price: sub.base_price?.toString() || '',
+                                                            image_url: sub.image_url || '',
+                                                            is_one_time: sub.is_one_time,
+                                                            is_daily: sub.is_daily,
+                                                            is_weekly: sub.is_weekly,
+                                                            is_monthly: sub.is_monthly,
+                                                            is_recommended: sub.is_recommended,
+                                                            is_popular: sub.is_popular,
+                                                            is_smart_pick: sub.is_smart_pick
+                                                        });
+                                                        setIsSubformModalOpen(true);
+                                                    }}
+                                                    className="absolute top-3 right-10 p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded opacity-0 group-hover:opacity-100 transition"
+                                                    title="Edit Subservice Basics"
+                                                >
+                                                    <ListTree className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => {
                                                         setEditingSubId(sub.id);
                                                         setSubForm({
                                                             ...subForm,
@@ -385,7 +415,7 @@ export default function CatalogPage() {
                                                     className="absolute top-10 right-3 p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded opacity-0 group-hover:opacity-100 transition"
                                                     title="Edit Rich Details"
                                                 >
-                                                    <ImageIcon className="w-4 h-4" />
+                                                    <Loader2 className="w-4 h-4" />
                                                 </button>
                                             </div>
                                         ))}
@@ -494,10 +524,10 @@ export default function CatalogPage() {
                     <div className="admin-modal">
                         <div className="admin-modal-header">
                             <div>
-                                <h2 className="text-lg font-black text-gray-900">New Subservice</h2>
+                                <h2 className="text-lg font-black text-gray-900">{editingSubId ? 'Edit' : 'New'} Subservice</h2>
                                 <p className="text-xs text-gray-500 font-medium">Specific task inside a Service</p>
                             </div>
-                            <button onClick={() => setIsSubformModalOpen(false)} className="action-icon-btn"><X className="w-4 h-4" /></button>
+                            <button onClick={() => { setIsSubformModalOpen(false); setEditingSubId(null); }} className="action-icon-btn"><X className="w-4 h-4" /></button>
                         </div>
                         <div className="admin-modal-body space-y-3">
                             <input
@@ -583,11 +613,11 @@ export default function CatalogPage() {
                             </div>
 
                             <button
-                                onClick={() => { handleCreateSubcategory(); }}
+                                onClick={() => { handleSaveSubcategory(); }}
                                 disabled={saving || !subForm.name}
                                 className="btn btn-primary w-full mt-4 py-4"
                             >
-                                <Plus className="w-5 h-5 mx-auto" />
+                                {editingSubId ? 'Update Subservice' : <Plus className="w-5 h-5 mx-auto" />}
                             </button>
                         </div>
                     </div>

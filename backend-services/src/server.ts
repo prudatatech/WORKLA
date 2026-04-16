@@ -196,6 +196,7 @@ async function startServer() {
     const defaultOrigins = [
         'http://localhost:3000',     // Admin portal (dev)
         'http://localhost:8081',     // Expo dev client
+        'http://192.168.1.112:3000', // Admin portal (local network)
     ];
 
     const origins = allowedOrigins.length > 0 ? allowedOrigins : defaultOrigins;
@@ -213,7 +214,7 @@ async function startServer() {
 
             // 🌐 Allow ALL local network IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x, etc.)
             // This ensures login works from any local machine or WiFi network.
-            const isLocalNetwork = /^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|localhost|127\.0\.0\.1)/.test(origin);
+            const isLocalNetwork = /^(http|https):\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|localhost|127\.0\.0\.1)/.test(origin);
             if (isLocalNetwork) return cb(null, true);
 
             // In dev, allow everything

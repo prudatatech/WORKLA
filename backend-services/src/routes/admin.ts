@@ -553,6 +553,126 @@ export default async function adminRoutes(fastifyInstance: FastifyInstance) {
     });
 
     // ══════════════════════════════════════════════
+    // CATALOG — Categories CRUD
+    // ══════════════════════════════════════════════
+
+    // GET /api/v1/admin/categories — List all categories
+    fastify.get('/categories', async (request, reply) => {
+        try {
+            const { data, error } = await supabaseAdmin
+                .from('service_categories')
+                .select('*')
+                .order('priority_number', { ascending: false })
+                .order('name', { ascending: true });
+            if (error) throw error;
+            return reply.send({ success: true, data });
+        } catch (err: any) {
+            return reply.code(500).send({ error: 'Failed to fetch categories.', details: err.message });
+        }
+    });
+
+    // GET /api/v1/admin/categories/:id — Get category detail
+    fastify.get('/categories/:id', { schema: { params: { type: 'object', properties: { id: { type: 'string', format: 'uuid' } } } } }, async (request, reply) => {
+        const { id } = request.params as any;
+        try {
+            const { data, error } = await supabaseAdmin.from('service_categories').select('*').eq('id', id).single();
+            if (error) throw error;
+            return reply.send({ success: true, data });
+        } catch (err: any) {
+            return reply.code(err.code === 'PGRST116' ? 404 : 500).send({ error: 'Failed to fetch category details.', details: err.message });
+        }
+    });
+
+    // POST /api/v1/admin/categories — Create a category
+    const createCategorySchema = {
+        body: {
+            type: 'object',
+            required: ['name'],
+            properties: {
+                name: { type: 'string', minLength: 2 },
+                description: { type: 'string' },
+                icon_name: { type: 'string' },
+                image_url: { type: 'string' },
+                priority_number: { type: 'integer' },
+                display_order: { type: 'integer' },
+                is_active: { type: 'boolean', default: true }
+            }
+        }
+    } as const;
+
+    fastify.post('/categories', { schema: createCategorySchema }, async (request, reply) => {
+        const body = request.body as any;
+        try {
+            const slug = body.name.toLowerCase().replace(/\s+/g, '-');
+            const priorityNumber = body.priority_number ?? body.display_order ?? 0;
+            const displayOrder = body.display_order ?? body.priority_number ?? 0;
+            
+            const { data, error } = await supabaseAdmin
+                .from('service_categories')
+                .insert([{ ...body, slug, priority_number: priorityNumber, display_order: displayOrder }])
+                .select()
+                .single();
+            if (error) throw error;
+            await cache.invalidatePattern('services:*');
+            return reply.code(201).send({ success: true, data });
+        } catch (err: any) {
+            return reply.code(500).send({ error: 'Failed to create category.', details: err.message });
+        }
+    });
+
+    // PATCH /api/v1/admin/categories/:id — Update a category
+    const updateCategorySchema = {
+        params: { type: 'object', properties: { id: { type: 'string', format: 'uuid' } } },
+        body: {
+            type: 'object',
+            properties: {
+                name: { type: 'string' },
+                description: { type: 'string' },
+                icon_name: { type: 'string' },
+                image_url: { type: 'string' },
+                priority_number: { type: 'integer' },
+                display_order: { type: 'integer' },
+                is_active: { type: 'boolean' }
+            }
+        }
+    } as const;
+
+    fastify.patch('/categories/:id', { schema: updateCategorySchema }, async (request, reply) => {
+        const { id } = request.params as any;
+        const body = request.body as any;
+        try {
+            const updates: any = { ...body, updated_at: new Date().toISOString() };
+            if (body.priority_number !== undefined) updates.display_order = body.priority_number;
+            if (body.display_order !== undefined) updates.priority_number = body.display_order;
+
+            const { data, error } = await supabaseAdmin
+                .from('service_categories')
+                .update(updates)
+                .eq('id', id)
+                .select()
+                .single();
+            if (error) throw error;
+            await cache.invalidatePattern('services:*');
+            return reply.send({ success: true, data });
+        } catch (err: any) {
+            return reply.code(500).send({ error: 'Failed to update category.', details: err.message });
+        }
+    });
+
+    // DELETE /api/v1/admin/categories/:id — Delete a category
+    fastify.delete('/categories/:id', { schema: { params: { type: 'object', properties: { id: { type: 'string', format: 'uuid' } } } } }, async (request, reply) => {
+        const { id } = request.params as any;
+        try {
+            const { error } = await supabaseAdmin.from('service_categories').delete().eq('id', id);
+            if (error) throw error;
+            await cache.invalidatePattern('services:*');
+            return reply.send({ success: true, message: 'Category deleted.' });
+        } catch (err: any) {
+            return reply.code(500).send({ error: 'Failed to delete category.', details: err.message });
+        }
+    });
+
+    // ══════════════════════════════════════════════
     // CATALOG — Services CRUD
     // ══════════════════════════════════════════════
 
@@ -572,6 +692,18 @@ export default async function adminRoutes(fastifyInstance: FastifyInstance) {
         }
     });
 
+    // GET /api/v1/admin/services/:id — Get service detail
+    fastify.get('/services/:id', { schema: { params: { type: 'object', properties: { id: { type: 'string', format: 'uuid' } } } } }, async (request, reply) => {
+        const { id } = request.params as any;
+        try {
+            const { data, error } = await supabaseAdmin.from('services').select('*').eq('id', id).single();
+            if (error) throw error;
+            return reply.send({ success: true, data });
+        } catch (err: any) {
+            return reply.code(err.code === 'PGRST116' ? 404 : 500).send({ error: 'Failed to fetch service details.', details: err.message });
+        }
+    });
+
     // POST /api/v1/admin/services — Create a service
     const createServiceSchema = {
         body: {
@@ -580,10 +712,13 @@ export default async function adminRoutes(fastifyInstance: FastifyInstance) {
             properties: {
                 name: { type: 'string', minLength: 2 },
                 description: { type: 'string' },
-                image_url: { type: 'string', format: 'uri' },
+                image_url: { type: ['string', 'null'] },
                 priority_number: { type: 'integer', default: 0 },
                 is_active: { type: 'boolean', default: true },
-                category: { type: 'string' }
+                category: { type: 'string' },
+                is_popular: { type: 'boolean', default: false },
+                is_smart_pick: { type: 'boolean', default: false },
+                is_recommended: { type: 'boolean', default: false }
             }
         }
     } as const;
@@ -620,10 +755,13 @@ export default async function adminRoutes(fastifyInstance: FastifyInstance) {
             properties: {
                 name: { type: 'string' },
                 description: { type: 'string' },
-                image_url: { type: 'string' },
+                image_url: { type: ['string', 'null'] },
                 priority_number: { type: 'integer' },
                 is_active: { type: 'boolean' },
-                category: { type: 'string' }
+                category: { type: 'string' },
+                is_popular: { type: 'boolean' },
+                is_smart_pick: { type: 'boolean' },
+                is_recommended: { type: 'boolean' }
             }
         }
     } as const;
@@ -690,6 +828,18 @@ export default async function adminRoutes(fastifyInstance: FastifyInstance) {
         }
     });
 
+    // GET /api/v1/admin/subcategories/:id — Get subcategory detail
+    fastify.get('/subcategories/:id', { schema: { params: { type: 'object', properties: { id: { type: 'string', format: 'uuid' } } } } }, async (request, reply) => {
+        const { id } = request.params as any;
+        try {
+            const { data, error } = await supabaseAdmin.from('service_subcategories').select('*').eq('id', id).single();
+            if (error) throw error;
+            return reply.send({ success: true, data });
+        } catch (err: any) {
+            return reply.code(err.code === 'PGRST116' ? 404 : 500).send({ error: 'Failed to fetch subcategory details.', details: err.message });
+        }
+    });
+
     // POST /api/v1/admin/subcategories — Create a subcategory
     const createSubSchema = {
         body: {
@@ -701,9 +851,22 @@ export default async function adminRoutes(fastifyInstance: FastifyInstance) {
                 description: { type: 'string' },
                 base_price: { type: 'number', minimum: 0 },
                 unit: { type: 'string', enum: ['fixed', 'hourly', 'daily'], default: 'fixed' },
-                image_url: { type: 'string' },
+                image_url: { type: ['string', 'null'] },
                 is_active: { type: 'boolean', default: true },
-                display_order: { type: 'integer', default: 0 }
+                display_order: { type: 'integer', default: 0 },
+                priority_number: { type: 'integer', default: 0 },
+                is_one_time: { type: 'boolean', default: true },
+                is_daily: { type: 'boolean', default: false },
+                is_weekly: { type: 'boolean', default: false },
+                is_monthly: { type: 'boolean', default: false },
+                is_popular: { type: 'boolean', default: false },
+                is_smart_pick: { type: 'boolean', default: false },
+                is_recommended: { type: 'boolean', default: false },
+                long_description: { type: ['string', 'null'] },
+                benefits: { type: 'array', items: { type: 'string' }, default: [] },
+                exclusions: { type: 'array', items: { type: 'string' }, default: [] },
+                faqs: { type: 'array', items: { type: 'object' }, default: [] },
+                gallery_urls: { type: 'array', items: { type: 'string' }, default: [] }
             }
         }
     } as const;
@@ -712,9 +875,20 @@ export default async function adminRoutes(fastifyInstance: FastifyInstance) {
         const body = request.body;
         try {
             const slug = (body.name || '').toLowerCase().replace(/\s+/g, '-');
+            
+            // Ensure BOTH display_order and priority_number are populated for cross-API compatibility
+            const displayOrder = body.display_order ?? body.priority_number ?? 0;
+            const priorityNumber = body.priority_number ?? body.display_order ?? 0;
+            
             const { data, error } = await supabaseAdmin
                 .from('service_subcategories')
-                .insert([{ ...body, slug, unit: body.unit || 'fixed' }])
+                .insert([{ 
+                    ...body, 
+                    slug, 
+                    display_order: displayOrder,
+                    priority_number: priorityNumber,
+                    unit: body.unit || 'fixed' 
+                }])
                 .select()
                 .single();
             if (error) throw error;
@@ -744,9 +918,22 @@ export default async function adminRoutes(fastifyInstance: FastifyInstance) {
                 description: { type: 'string' },
                 base_price: { type: 'number', minimum: 0 },
                 unit: { type: 'string', enum: ['fixed', 'hourly', 'daily'] },
-                image_url: { type: 'string' },
+                image_url: { type: ['string', 'null'] },
                 is_active: { type: 'boolean' },
-                display_order: { type: 'integer' }
+                display_order: { type: 'integer' },
+                priority_number: { type: 'integer' },
+                is_one_time: { type: 'boolean' },
+                is_daily: { type: 'boolean' },
+                is_weekly: { type: 'boolean' },
+                is_monthly: { type: 'boolean' },
+                is_popular: { type: 'boolean' },
+                is_smart_pick: { type: 'boolean' },
+                is_recommended: { type: 'boolean' },
+                long_description: { type: ['string', 'null'] },
+                benefits: { type: 'array', items: { type: 'string' } },
+                exclusions: { type: 'array', items: { type: 'string' } },
+                faqs: { type: 'array', items: { type: 'object' } },
+                gallery_urls: { type: 'array', items: { type: 'string' } }
             }
         }
     } as const;
@@ -755,9 +942,14 @@ export default async function adminRoutes(fastifyInstance: FastifyInstance) {
         const { id } = request.params;
         const body = request.body;
         try {
+            // Handle cross-utility for ordering columns
+            const updates: any = { ...body };
+            if (body.display_order !== undefined) updates.priority_number = body.display_order;
+            if (body.priority_number !== undefined) updates.display_order = body.priority_number;
+
             const { data, error } = await supabaseAdmin
                 .from('service_subcategories')
-                .update({ ...body, updated_at: new Date().toISOString() })
+                .update({ ...updates, updated_at: new Date().toISOString() })
                 .eq('id', id)
                 .select()
                 .single();

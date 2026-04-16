@@ -29,7 +29,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SearchingProvider from '../../components/SearchingProvider';
 import CancelModal from '../../components/bookings/CancelModal';
@@ -615,6 +615,7 @@ export default function TrackingScreen() {
                     {/* FULL SCREEN MAP */}
                     <MapView
                         ref={mapRef}
+                        provider={PROVIDER_GOOGLE}
                         style={styles.map}
                         initialRegion={mapRegion}
                         showsUserLocation
