@@ -13,7 +13,7 @@ import {
     ArrowRight
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { createClient } from '@/utils/supabase/client';
+import { adminApi } from '@/utils/api';
 
 interface BookingSidebarProps {
     bookingId: string | null;
@@ -25,7 +25,6 @@ interface BookingSidebarProps {
 export default function BookingSidebar({ bookingId, onClose, onViewProvider, onViewCustomer }: BookingSidebarProps) {
     const [booking, setBooking] = useState<any>(null);
     const [loading, setLoading] = useState(false);
-    const supabase = createClient();
 
     useEffect(() => {
         if (bookingId) {
@@ -36,18 +35,7 @@ export default function BookingSidebar({ bookingId, onClose, onViewProvider, onV
     const fetchBookingDetail = async () => {
         setLoading(true);
         try {
-            // We use the new rich detail endpoint or direct supabase join
-            const { data, error } = await supabase
-                .from('bookings')
-                .select(`
-                    *,
-                    customer:profiles!bookings_customer_id_fkey(*),
-                    provider:profiles!bookings_provider_id_fkey(*, provider_details(*)),
-                    review:booking_reviews(*)
-                `)
-                .eq('id', bookingId)
-                .single();
-
+            const { data, error } = await adminApi.get(`/api/v1/admin/bookings/${bookingId}`);
             if (data) setBooking(data);
         } catch (err) {
             console.error(err);

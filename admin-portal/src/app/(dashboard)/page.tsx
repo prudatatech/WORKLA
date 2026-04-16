@@ -204,7 +204,7 @@ export default function Home() {
 
             <div className="verification-list">
               {pendingApprovals.length > 0 ? pendingApprovals.map(p => (
-                <div key={p.id} className="pending-user-row">
+                <div key={p.provider_id} className="pending-user-row">
                   <div className="flex items-center gap-3">
                     <div className="user-avatar-placeholder">
                       {(p.profiles?.full_name || 'P')[0]}
@@ -215,7 +215,7 @@ export default function Home() {
                     </div>
                   </div>
                   <button 
-                    onClick={() => router.push(`/providers?search=${p.id}`)}
+                    onClick={() => router.push(`/providers?search=${p.provider_id}`)}
                     className="action-icon-btn"
                   >
                     <ChevronRight className="w-4 h-4" />

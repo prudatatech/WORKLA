@@ -179,7 +179,7 @@ export default function HomeScreen() {
         if (!user) return;
         try {
           const results = await Promise.all([
-            api.get('/api/v1/users/me').catch(() => ({ data: { data: null } })),
+            api.get('/api/v1/users/me').catch(() => ({ data: null })),
             supabase.from('bookings').select('id, service_name_snapshot')
               .eq('customer_id', user.id).eq('status', 'completed').is('customer_rating', null)
               .order('completed_at', { ascending: false }).limit(1).maybeSingle(),
@@ -188,10 +188,11 @@ export default function HomeScreen() {
             supabase.from('bookings').select('id, status, service_name_snapshot, booking_number')
               .eq('customer_id', user.id).in('status', ['requested', 'searching', 'confirmed', 'en_route', 'arrived', 'in_progress'])
               .order('created_at', { ascending: false }).limit(1).maybeSingle(),
-            api.get('/api/v1/drafts').catch(() => ({ data: { data: [] } }))
+            api.get('/api/v1/drafts').catch(() => ({ data: [] })),
+            api.get('/api/v1/addresses').catch(() => ({ data: [] }))
           ]);
           
-          const [meRes, unratedRes, recentRes, activeRes, draftRes] = results as any[];
+          const [meRes, unratedRes, recentRes, activeRes, draftRes, addressRes] = results as any[];
 
           if (meRes.data?.data) {
             const p = meRes.data.data;
@@ -213,10 +214,9 @@ export default function HomeScreen() {
           } else {
             setActiveBooking(null);
           }
-          if (Array.isArray(draftRes.data?.data)) setDrafts(draftRes.data.data);
+          if (Array.isArray(draftRes.data)) setDrafts(draftRes.data);
 
           // GPS & Addresses — safe, never throws
-          const addressRes = await api.get('/api/v1/addresses').catch(() => ({ data: [] }));
           try {
             const { status } = await Location.requestForegroundPermissionsAsync();
             if (status === 'granted') {

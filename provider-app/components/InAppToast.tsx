@@ -22,12 +22,22 @@ export default function InAppToast({ visible, title, body, type = 'info', durati
     const opacity = useRef(new Animated.Value(0)).current;
     const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const dismiss = useCallback(() => {
+    const onDismissRef = useRef(onDismiss);
+
+    useEffect(() => {
+        onDismissRef.current = onDismiss;
+    }, [onDismiss]);
+
+    const hideToast = (notifyParent = true) => {
         Animated.parallel([
             Animated.timing(translateY, { toValue: -120, duration: 250, useNativeDriver: true }),
             Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-        ]).start(() => onDismiss());
-    }, [opacity, translateY, onDismiss]);
+        ]).start(({ finished }) => {
+            if (finished && notifyParent) {
+                onDismissRef.current();
+            }
+        });
+    };
 
     useEffect(() => {
         if (visible) {
@@ -38,16 +48,17 @@ export default function InAppToast({ visible, title, body, type = 'info', durati
 
             if (timeoutRef.current) clearTimeout(timeoutRef.current);
             timeoutRef.current = setTimeout(() => {
-                dismiss();
+                hideToast(true);
             }, duration);
         } else {
-            dismiss();
+            // Parent turned visible to false or it's hiding. Just animate out, don't ping parent again.
+            hideToast(false);
         }
 
         return () => {
             if (timeoutRef.current) clearTimeout(timeoutRef.current);
         };
-    }, [visible, duration, dismiss, translateY, opacity]);
+    }, [visible, duration, translateY, opacity]);
 
     if (!visible && !title) return null;
 
@@ -64,7 +75,7 @@ export default function InAppToast({ visible, title, body, type = 'info', durati
             <TouchableOpacity
                 style={styles.inner}
                 activeOpacity={0.8}
-                onPress={dismiss}
+                onPress={() => hideToast(true)}
             >
                 <Text style={styles.icon}>{color.icon}</Text>
                 <View style={styles.textContainer}>

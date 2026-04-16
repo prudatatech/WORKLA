@@ -9,6 +9,7 @@ import {
     ImageIcon,
     ListTree,
     Loader2,
+    Pencil,
     Plus,
     Trash2,
     X
@@ -126,7 +127,11 @@ export default function CatalogPage() {
     };
 
     const handleSaveSubcategory = async () => {
-        if (!subForm.name || !activeTargetId) return;
+        if (!subForm.name || !activeTargetId) {
+            console.warn('MISSING DATA FOR SUB-SERVICE:', { name: subForm.name, activeTargetId });
+            alert('Please ensure the service is selected and a name is provided.');
+            return;
+        }
         setSaving(true);
         const payload = {
             service_id: activeTargetId,
@@ -354,69 +359,99 @@ export default function CatalogPage() {
                                                             {sub.is_weekly && <span className="badge badge-reverify">Weekly</span>}
                                                             {sub.is_monthly && <span className="badge badge-rejected">Monthly</span>}
                                                         </div>
-                                                        <p className="text-sm font-black text-emerald-700">₹{sub.base_price}</p>
+                                                        <div className="flex items-center gap-1 group/price">
+                                                            <p className="text-sm font-black text-emerald-700">₹{sub.base_price}</p>
+                                                            <button 
+                                                                onClick={() => {
+                                                                    setActiveTargetId(srv.id);
+                                                                    setEditingSubId(sub.id);
+                                                                    setSubForm({
+                                                                        ...subForm,
+                                                                        name: sub.name,
+                                                                        description: sub.description || '',
+                                                                        base_price: sub.base_price?.toString() || '',
+                                                                        image_url: sub.image_url || '',
+                                                                        is_one_time: sub.is_one_time,
+                                                                        is_daily: sub.is_daily,
+                                                                        is_weekly: sub.is_weekly,
+                                                                        is_monthly: sub.is_monthly,
+                                                                        is_recommended: sub.is_recommended,
+                                                                        is_popular: sub.is_popular,
+                                                                        is_smart_pick: sub.is_smart_pick
+                                                                    });
+                                                                    setIsSubformModalOpen(true);
+                                                                }}
+                                                                className="p-1 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition opacity-0 group-hover:opacity-100"
+                                                                title="Edit Price"
+                                                            >
+                                                                <Pencil className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                                <button
-                                                    onClick={() => handleDeleteNode(sub.id, 'service_subcategories')}
-                                                    className="absolute top-3 right-3 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => {
-                                                        setActiveTargetId(srv.id);
-                                                        setEditingSubId(sub.id);
-                                                        setSubForm({
-                                                            ...subForm,
-                                                            name: sub.name,
-                                                            description: sub.description || '',
-                                                            base_price: sub.base_price?.toString() || '',
-                                                            image_url: sub.image_url || '',
-                                                            is_one_time: sub.is_one_time,
-                                                            is_daily: sub.is_daily,
-                                                            is_weekly: sub.is_weekly,
-                                                            is_monthly: sub.is_monthly,
-                                                            is_recommended: sub.is_recommended,
-                                                            is_popular: sub.is_popular,
-                                                            is_smart_pick: sub.is_smart_pick
-                                                        });
-                                                        setIsSubformModalOpen(true);
-                                                    }}
-                                                    className="absolute top-3 right-10 p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded opacity-0 group-hover:opacity-100 transition"
-                                                    title="Edit Subservice Basics"
-                                                >
-                                                    <ListTree className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => {
-                                                        setEditingSubId(sub.id);
-                                                        setSubForm({
-                                                            ...subForm,
-                                                            name: sub.name,
-                                                            description: sub.description || '',
-                                                            base_price: sub.base_price?.toString() || '',
-                                                            image_url: sub.image_url || '',
-                                                            is_one_time: sub.is_one_time,
-                                                            is_daily: sub.is_daily,
-                                                            is_weekly: sub.is_weekly,
-                                                            is_monthly: sub.is_monthly,
-                                                            is_recommended: sub.is_recommended,
-                                                            is_popular: sub.is_popular,
-                                                            is_smart_pick: sub.is_smart_pick,
-                                                            long_description: sub.long_description || '',
-                                                            benefits: sub.benefits || [],
-                                                            exclusions: sub.exclusions || [],
-                                                            faqs: sub.faqs || [],
-                                                            gallery_urls: sub.gallery_urls || []
-                                                        });
-                                                        setIsRichEditModalOpen(true);
-                                                    }}
-                                                    className="absolute top-10 right-3 p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded opacity-0 group-hover:opacity-100 transition"
-                                                    title="Edit Rich Details"
-                                                >
-                                                    <Loader2 className="w-4 h-4" />
-                                                </button>
+                                                <div className="flex flex-col gap-1">
+                                                    <button
+                                                        onClick={() => {
+                                                            setActiveTargetId(srv.id);
+                                                            setEditingSubId(sub.id);
+                                                            setSubForm({
+                                                                ...subForm,
+                                                                name: sub.name,
+                                                                description: sub.description || '',
+                                                                base_price: sub.base_price?.toString() || '',
+                                                                image_url: sub.image_url || '',
+                                                                is_one_time: sub.is_one_time,
+                                                                is_daily: sub.is_daily,
+                                                                is_weekly: sub.is_weekly,
+                                                                is_monthly: sub.is_monthly,
+                                                                is_recommended: sub.is_recommended,
+                                                                is_popular: sub.is_popular,
+                                                                is_smart_pick: sub.is_smart_pick
+                                                            });
+                                                            setIsSubformModalOpen(true);
+                                                        }}
+                                                        className="p-1.5 text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors border border-gray-100"
+                                                        title="Edit Basics"
+                                                    >
+                                                        <ListTree className="w-4 h-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setEditingSubId(sub.id);
+                                                            setSubForm({
+                                                                ...subForm,
+                                                                name: sub.name,
+                                                                description: sub.description || '',
+                                                                base_price: sub.base_price?.toString() || '',
+                                                                image_url: sub.image_url || '',
+                                                                is_one_time: sub.is_one_time,
+                                                                is_daily: sub.is_daily,
+                                                                is_weekly: sub.is_weekly,
+                                                                is_monthly: sub.is_monthly,
+                                                                is_recommended: sub.is_recommended,
+                                                                is_popular: sub.is_popular,
+                                                                is_smart_pick: sub.is_smart_pick,
+                                                                long_description: sub.long_description || '',
+                                                                benefits: sub.benefits || [],
+                                                                exclusions: sub.exclusions || [],
+                                                                faqs: sub.faqs || [],
+                                                                gallery_urls: sub.gallery_urls || []
+                                                            });
+                                                            setIsRichEditModalOpen(true);
+                                                        }}
+                                                        className="p-1.5 text-violet-500 hover:bg-violet-50 rounded-lg transition-colors border border-gray-100"
+                                                        title="Edit Details"
+                                                    >
+                                                        <Loader2 className="w-4 h-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteNode(sub.id, 'service_subcategories')}
+                                                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-gray-100"
+                                                        title="Delete"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>

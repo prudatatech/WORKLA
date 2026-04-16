@@ -48,6 +48,11 @@ services:
     networks:
       - workla-net
     restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     deploy:
       resources:
         limits:

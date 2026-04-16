@@ -9,6 +9,9 @@ let _cachedToken: string | null = null;
 let _tokenExpiresAt = 0;
 let _tokenPromise: Promise<string | null> | null = null;
 
+// ── Simple Request Deduplication ──
+const _pendingRequests = new Map<string, Promise<any>>();
+
 async function getCachedToken(): Promise<string | null> {
     const now = Date.now();
     if (_cachedToken && now < _tokenExpiresAt) return _cachedToken;
@@ -110,7 +113,8 @@ export async function apiRequest<T = any>(
             useResilienceStore.getState().setRecovering(false);
         }
 
-        return { data: result.data || result, error: null };
+        const data = result.data !== undefined ? result.data : result;
+        return { data, error: null };
     } catch (err: any) {
         console.error(`[API ❌] ${API_URL}${path}:`, err);
         return { data: null, error: err.message || 'Network request failed' };
@@ -118,8 +122,16 @@ export async function apiRequest<T = any>(
 }
 
 export const api = {
-    get: <T = any>(path: string, options?: RequestInit) =>
-        apiRequest<T>(path, { ...options, method: 'GET' }),
+    get: <T = any>(path: string, options?: RequestInit) => {
+        const key = `GET:${path}`;
+        if (_pendingRequests.has(key)) return _pendingRequests.get(key);
+
+        const promise = apiRequest<T>(path, { ...options, method: 'GET' })
+            .finally(() => _pendingRequests.delete(key));
+        
+        _pendingRequests.set(key, promise);
+        return promise;
+    },
 
     post: <T = any>(path: string, body: any, options?: RequestInit) =>
         apiRequest<T>(path, { ...options, method: 'POST', body: JSON.stringify(body) }),

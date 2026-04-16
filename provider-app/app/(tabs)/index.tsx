@@ -1,5 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
+import { safeRequestPermissions, safeScheduleNotification, safeSetNotificationHandler } from '../../lib/notifications';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as TaskManager from 'expo-task-manager';
 import { AlertTriangle, ChevronRight } from 'lucide-react-native';
@@ -11,10 +12,12 @@ import StatsRow from '../../components/home/StatsRow';
 import WeeklyChart from '../../components/home/WeeklyChart';
 import LiveMap from '../../components/home/LiveMap';
 import IncomingJobModal from '../../components/home/IncomingJobModal';
+import VerificationSuccessModal from '../../components/VerificationSuccessModal';
 import { StatCardSkeleton, EarningRowSkeleton } from '../../components/SkeletonLoader';
 import { Clock, MapPin } from 'lucide-react-native';
 import { api } from '../../lib/api';
 import { localCache } from '../../lib/localCache';
+import { socketService } from '../../lib/socket';
 import { supabase } from '../../lib/supabase';
 
 const PRIMARY = '#1A3FFF';
@@ -54,6 +57,7 @@ export default function ProviderHomeScreen() {
   const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [currentCity, setCurrentCity] = useState<string>('Detecting location...');
   const [activeJob, setActiveJob] = useState<any>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const router = useRouter();
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -108,6 +112,25 @@ export default function ProviderHomeScreen() {
     } catch { }
   };
 
+  useEffect(() => {
+    // Request notification permissions
+    (async () => {
+      const { status } = await safeRequestPermissions();
+      if (status !== 'granted' && status !== 'denied') {
+          console.warn('Notification permissions not granted or failed');
+      }
+    })();
+
+    // Configure notification behavior
+    safeSetNotificationHandler({
+        handleNotification: async () => ({
+            shouldShowAlert: true,
+            shouldPlaySound: true,
+            shouldSetBadge: false,
+        }),
+    });
+  }, []);
+
   const loadStats = useCallback(async () => {
     // ── Instant: Show cached stats while refreshing ──
     const cached = await localCache.get<any>('provider:stats');
@@ -124,50 +147,75 @@ export default function ProviderHomeScreen() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data: sp } = await supabase.from('provider_details').select('is_online, avg_rating, business_name').eq('provider_id', user.id).maybeSingle();
-    if (sp) {
-      setIsOnline(sp.is_online ?? false);
-      setRating(sp.avg_rating ?? 0);
-      setProviderName(sp.business_name ?? 'Provider');
-      if (sp.is_online) startLocationTracking(user.id);
-    }
-
-    const { data: docs } = await supabase.from('provider_documents').select('id').eq('provider_id', user.id).maybeSingle();
-    const { data: bank } = await supabase.from('provider_bank_accounts').select('id').eq('provider_id', user.id).maybeSingle();
-    if (!docs && !bank) setIncompleteProfile({ type: 'both' });
-    else if (!docs) setIncompleteProfile({ type: 'kyc' });
-    else if (!bank) setIncompleteProfile({ type: 'bank' });
-    else setIncompleteProfile(null);
-
     try {
-      const res = await api.get('/api/v1/providers/analytics');
-      if (res.data) {
-        setTodayEarnings(res.data.todayEarnings || 0);
-        setTodayJobs(res.data.todayJobs || 0);
-        setWeeklyData(res.data.weeklyData || [0, 0, 0, 0, 0, 0, 0]);
-        if (res.data.rating) setRating(res.data.rating);
+      setLoading(true);
+      const [providerRes, analyticsRes, activeJobRes] = await Promise.all([
+        supabase
+          .from('provider_details')
+          .select(`
+            is_online, 
+            avg_rating, 
+            business_name, 
+            verification_status,
+            provider_documents(id),
+            provider_bank_accounts(id)
+          `)
+          .eq('provider_id', user.id)
+          .maybeSingle(),
+        api.get('/api/v1/providers/analytics'),
+        api.get('/api/v1/bookings?role=provider&status=confirmed,en_route,arrived,in_progress')
+      ]);
 
-        // Cache the stats for instant loading next time
-        localCache.set('provider:stats', {
-          todayEarnings: res.data.todayEarnings || 0,
-          todayJobs: res.data.todayJobs || 0,
-          rating: res.data.rating || sp?.avg_rating || 0,
-          weeklyData: res.data.weeklyData || [0,0,0,0,0,0,0],
-          providerName: sp?.business_name || 'Provider',
-          isOnline: sp?.is_online ?? false,
-        }, 300); // 5-min TTL
+      if (providerRes.data) {
+        const sp = providerRes.data;
+        setIsOnline(sp.is_online ?? false);
+        setRating(sp.avg_rating ?? 0);
+        setProviderName(sp.business_name ?? 'Provider');
+        if (sp.is_online) startLocationTracking(user.id);
+        
+        const hasDocs = sp.provider_documents && sp.provider_documents.length > 0;
+        const hasBank = sp.provider_bank_accounts && sp.provider_bank_accounts.length > 0;
+        const isUnderReviewOrVerified = sp.verification_status === 'pending' || sp.verification_status === 'verified';
+
+        if (isUnderReviewOrVerified) {
+          setIncompleteProfile(null);
+        } else if (!hasDocs && !hasBank) {
+          setIncompleteProfile({ type: 'both' });
+        } else if (!hasDocs) {
+          setIncompleteProfile({ type: 'kyc' });
+        } else if (!hasBank) {
+          setIncompleteProfile({ type: 'bank' });
+        } else {
+          setIncompleteProfile(null);
+        }
+
+        const currentCache = await localCache.get<any>('provider:stats') || {};
+        localCache.set('provider:stats', { ...currentCache, verificationStatus: sp.verification_status }, 300);
       }
 
-      // Fetch active job for UI
-      try {
-          const activeRes = await api.get('/api/v1/bookings?role=provider&status=confirmed,en_route,arrived,in_progress');
-          if (activeRes.data && activeRes.data.length > 0) {
-              setActiveJob(activeRes.data[0]);
-          } else {
-              setActiveJob(null);
-          }
-      } catch (err) { console.error('Failed to fetch active job', err); }
+      if (analyticsRes.data) {
+        const d = analyticsRes.data;
+        setTodayEarnings(d.todayEarnings || 0);
+        setTodayJobs(d.todayJobs || 0);
+        setWeeklyData(d.weeklyData || [0, 0, 0, 0, 0, 0, 0]);
+        if (d.rating) setRating(d.rating);
 
+        localCache.set('provider:stats', {
+          todayEarnings: d.todayEarnings || 0,
+          todayJobs: d.todayJobs || 0,
+          rating: d.rating || providerRes.data?.avg_rating || 0,
+          weeklyData: d.weeklyData || [0,0,0,0,0,0,0],
+          providerName: providerRes.data?.business_name || 'Provider',
+          isOnline: providerRes.data?.is_online ?? false,
+          verificationStatus: providerRes.data?.verification_status || 'unverified'
+        }, 300);
+      }
+
+      if (activeJobRes.data && activeJobRes.data.length > 0) {
+        setActiveJob(activeJobRes.data[0]);
+      } else {
+        setActiveJob(null);
+      }
     } catch (error) {
       console.error('Error fetching analytics:', error);
     } finally {
@@ -208,16 +256,30 @@ export default function ProviderHomeScreen() {
   }, [slideAnim, loadStats]);
 
   const showIncomingJob = useCallback(async (offer: any) => {
-    const { data: booking } = await supabase.from('bookings').select('*, service_subcategories(name), profiles!bookings_customer_id_fkey(full_name)').eq('id', offer.booking_id).single();
-    if (!booking) return;
+    let bookingData: any = null;
+    try {
+      const { data: booking, error } = await supabase
+        .from('bookings')
+        .select('*, service_subcategories(name), profiles!bookings_customer_id_fkey(full_name)')
+        .eq('id', offer.booking_id)
+        .single();
+      
+      if (error) throw error;
+      bookingData = booking;
+    } catch (err) {
+      console.warn('Failed to fetch booking details for popup, using fallback labels:', err);
+    }
+
     setIncomingJob({
-      offerId: offer.id, bookingId: offer.booking_id,
-      service: booking.service_subcategories?.name ?? 'Service',
-      address: booking.customer_address ?? 'Address not set',
+      offerId: offer.id, 
+      bookingId: offer.booking_id,
+      service: bookingData?.service_subcategories?.name ?? 'New Work Request',
+      address: bookingData?.customer_address ?? 'Tap to see location',
       distance: offer.distance_km ? `${offer.distance_km.toFixed(1)} km away` : 'Nearby',
-      estimatedPrice: booking.total_amount ?? 0,
-      customerName: (booking.profiles as any)?.full_name ?? 'Customer',
-      scheduledDate: booking.scheduled_date ?? '', timeSlot: booking.scheduled_time_slot ?? '',
+      estimatedPrice: bookingData?.total_amount ?? 0,
+      customerName: (bookingData?.profiles as any)?.full_name ?? 'Customer',
+      scheduledDate: bookingData?.scheduled_date ?? '', 
+      timeSlot: bookingData?.scheduled_time_slot ?? '',
     });
     setCountdown(30);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -232,13 +294,57 @@ export default function ProviderHomeScreen() {
   const subscribeToOffers = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
+
+    // 1. Listen for Job Offers via Supabase Realtime
     supabase.channel('provider-offers').on('postgres_changes', {
       event: 'INSERT', schema: 'public', table: 'job_offers', filter: `provider_id=eq.${user.id}`,
     }, (payload) => {
       const offer = payload.new as any;
       if (offer.status === 'pending') showIncomingJob(offer);
     }).subscribe();
-  }, [showIncomingJob]);
+
+    // 2. High-speed WebSocket backup for instant popups
+    try {
+      const socket = await socketService.getSocket();
+      socket.on('job:new_offer', (data) => {
+        if (data.offer) showIncomingJob(data.offer);
+      });
+    } catch (err) {
+      console.warn('Socket connection failed, relying on Realtime backup');
+    }
+
+    // 3. Listen for Verification Status Changes (Celebration!)
+    supabase.channel('verification-status').on('postgres_changes', {
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'provider_details', 
+        filter: `provider_id=eq.${user.id}`
+    }, (payload) => {
+        const oldStatus = (payload.old as any)?.verification_status;
+        const newStatus = (payload.new as any).verification_status;
+
+        if (oldStatus !== 'verified' && newStatus === 'verified') {
+            setShowSuccessModal(true);
+            // Instant cache update so toggle is unlocked immediately
+            localCache.get<any>('provider:stats').then(cached => {
+                if (cached) {
+                    localCache.set('provider:stats', { ...cached, verificationStatus: 'verified' }, 300);
+                }
+            });
+            loadStats(); // Full refresh
+
+            // Trigger Local Notification (for background awareness)
+            safeScheduleNotification({
+                content: {
+                    title: "Status Approved! 🎉",
+                    body: "Your Workla profile is verified. You can now go online to take jobs!",
+                    sound: true,
+                },
+                trigger: null, // Instant
+            });
+        }
+    }).subscribe();
+  }, [showIncomingJob, loadStats]);
 
   useEffect(() => { loadStats(); subscribeToOffers(); }, [loadStats, subscribeToOffers]);
 
@@ -264,6 +370,28 @@ export default function ProviderHomeScreen() {
 
   const toggleOnline = async () => {
     if (toggling) return; // prevent double-tap
+
+    const cached = await localCache.get<any>('provider:stats');
+    const status = cached?.verificationStatus;
+
+    if (status === 'unverified') {
+        Alert.alert('Action Required', 'Please complete your KYC and bank details to go online.', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Complete KYC', onPress: () => router.push('/kyc' as any) }
+        ]);
+        return;
+    }
+
+    if (status === 'pending') {
+        Alert.alert('Under Review', 'Your KYC documents are currently being reviewed by our Admin team. You will be able to go online once approved.');
+        return;
+    }
+
+    if (status === 'rejected' || status === 'suspended' || status === 'reverify') {
+        Alert.alert('Action Required', 'Your profile is currently suspended or rejected. Please contact support.');
+        return;
+    }
+
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setToggling(true);
     const newVal = !isOnline;
@@ -314,10 +442,14 @@ export default function ProviderHomeScreen() {
           </View>
         ) : (
           <View>
+            <VerificationSuccessModal 
+                visible={showSuccessModal} 
+                onClose={() => setShowSuccessModal(false)} 
+            />
             <StatsRow todayEarnings={todayEarnings} todayJobs={todayJobs} rating={rating} />
 
             {incompleteProfile && (
-              <TouchableOpacity style={styles.kycCard} onPress={() => router.push('/onboarding' as any)} activeOpacity={0.9}>
+              <TouchableOpacity style={styles.kycCard} onPress={() => router.push('/kyc' as any)} activeOpacity={0.9}>
                 <View style={styles.kycIconWrap}><AlertTriangle size={20} color="#FFF" /></View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.kycTitle}>Action Required</Text>
@@ -450,4 +582,5 @@ const styles = StyleSheet.create({
   locationText: { fontSize: 15, fontWeight: '700', color: '#111827' },
   syncBtn: { backgroundColor: '#F3F4F6', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12 },
   syncBtnText: { color: PRIMARY, fontSize: 13, fontWeight: '700' },
+  activeJobWidget: {},
 });

@@ -23,14 +23,19 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
     throw new Error('Not authenticated — please log in again');
   }
   return {
-    'Content-Type': 'application/json',
     'Authorization': `Bearer ${session.access_token}`,
   };
 }
 
 async function request<T = any>(method: string, path: string, body?: any): Promise<{ data: T | null; error: string | null }> {
   try {
-    const headers = await getAuthHeaders();
+    const authHeaders = await getAuthHeaders();
+    const headers: Record<string, string> = { ...authHeaders };
+    
+    if (body) {
+      headers['Content-Type'] = 'application/json';
+    }
+
     const res = await fetch(`${API_URL}${path}`, {
       method,
       headers,

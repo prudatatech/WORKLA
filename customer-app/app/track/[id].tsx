@@ -31,9 +31,8 @@ import {
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import SearchingProvider from '../../components/SearchingProvider';
-import CancelModal from '../../components/bookings/CancelModal';
 import RescheduleModal from '../../components/bookings/RescheduleModal';
+import NearbyWorkers from '../../components/bookings/NearbyWorkers';
 import { api } from '../../lib/api';
 import { socketService } from '../../lib/socket';
 import { supabase } from '../../lib/supabase';
@@ -68,6 +67,7 @@ export default function TrackingScreen() {
 
     const [loading, setLoading] = useState(true);
     const [booking, setBooking] = useState<any>(null);
+    const [offers, setOffers] = useState<any[]>([]);
     const [providerLocation, setProviderLocation] = useState<{ latitude: number; longitude: number } | null>(null);
     const [eta, setEta] = useState('...'); // Will be updated on load
 
@@ -109,6 +109,17 @@ export default function TrackingScreen() {
             const data = res.data;
             setBooking(data);
 
+            // Fetch initial offers if still searching
+            if (['requested', 'searching'].includes(data.status)) {
+                const { data: offerData } = await supabase
+                    .from('job_offers')
+                    .select('id, distance_km, provider_details(business_name, avg_rating, profiles(full_name))')
+                    .eq('booking_id', id)
+                    .neq('status', 'rejected')
+                    .neq('status', 'expired');
+                if (offerData) setOffers(offerData);
+            }
+
             // Most recent GPS ping from provider_locations
             if (data.provider_id) {
                 const { data: locData } = await supabase
@@ -140,15 +151,16 @@ export default function TrackingScreen() {
     }, [id, loadBooking]);
 
     // Fallback polling for status changes (if WebSockets fail or are delayed)
+    // 🛡️ Optimized: Throttled polling (15s) for slow internet resilience
     useEffect(() => {
         const isSearching = booking ? ['requested', 'searching'].includes(booking.status) : true;
         if (!id || !isSearching) return;
 
         const interval = setInterval(() => {
-            console.log('[Polling 🔄] Checking if worker assigned for booking:', id);
+            console.log('[Polling 🔄] Fallback check for booking status:', id);
             // forceRefresh=true ensures we bypass the 300s Redis cache
             loadBooking(false, true); 
-        }, 5000);
+        }, 15000); // Increased from 5s to 15s for lower bandwidth usage
 
         return () => clearInterval(interval);
     }, [id, booking?.status, loadBooking]);
@@ -234,6 +246,36 @@ export default function TrackingScreen() {
             )
             .subscribe();
 
+        // 🛡️ Real-time Offers Sub (for the "Offer Bar")
+        const offerChannel = supabase
+            .channel(`booking-offers-${id}`)
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'job_offers', filter: `booking_id=eq.${id}` },
+                async (payload) => {
+                    console.log('[Real-time 📢] Job offer updated:', payload.eventType);
+                    
+                    if (payload.eventType === 'INSERT') {
+                        // For inserts, we need to fetch the relations (profiles etc)
+                        const { data: newOffer } = await supabase
+                            .from('job_offers')
+                            .select('id, distance_km, provider_details(business_name, avg_rating, profiles(full_name))')
+                            .eq('id', (payload.new as any).id)
+                            .single();
+                        
+                        if (newOffer) {
+                            setOffers(prev => [...prev.filter(o => o.id !== newOffer.id), newOffer]);
+                        }
+                    } else if (payload.eventType === 'UPDATE') {
+                        const updatedOffer = payload.new as any;
+                        if (updatedOffer.status === 'rejected' || updatedOffer.status === 'expired') {
+                            setOffers(prev => prev.filter(o => o.id !== updatedOffer.id));
+                        }
+                    }
+                }
+            )
+            .subscribe();
+
         // 🔄 App State Listener (Refresh on Foreground)
         const subscription = AppState.addEventListener('change', nextAppState => {
             if (nextAppState === 'active') {
@@ -244,6 +286,7 @@ export default function TrackingScreen() {
 
         return () => {
             supabase.removeChannel(channel);
+            supabase.removeChannel(offerChannel);
             subscription.remove();
         };
     }, [id, loadBooking]);
@@ -453,6 +496,11 @@ export default function TrackingScreen() {
             {isSearching ? (
                 <View style={{ flex: 1 }}>
                     <SearchingProvider serviceName={booking.service_name_snapshot || 'Service'} />
+
+                    {/* LIVE OFFER BAR (Nearby Workers) */}
+                    <View style={{ position: 'absolute', top: '70%', width: '100%' }}>
+                        <NearbyWorkers offers={offers} />
+                    </View>
 
                     {/* Floating back button */}
                     <SafeAreaView style={styles.headerOverlay} edges={['top']} pointerEvents="box-none">

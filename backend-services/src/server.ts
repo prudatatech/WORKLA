@@ -91,7 +91,11 @@ server.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, bod
     } else {
         // Standard JSON parsing for other routes
         try {
-            const json = JSON.parse(body.toString());
+            const raw = body.toString();
+            if (!raw) {
+                return done(null, null);
+            }
+            const json = JSON.parse(raw);
             done(null, json);
         } catch (err: any) {
             err.statusCode = 400;
@@ -224,7 +228,7 @@ async function startServer() {
             cb(new Error(`CORS: Origin ${origin} not allowed`), false);
         },
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'Bypass-Tunnel-Reminder', 'x-access-token', 'Cache-Control', 'Pragma', 'Expires', 'x-client-info', 'apikey'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'Bypass-Tunnel-Reminder', 'x-access-token', 'Cache-Control', 'Pragma', 'Expires', 'x-client-info', 'apikey', 'x-supabase-api-version', 'x-supabase-auth-token', 'accept-profile', 'content-profile', 'prefer', 'range'],
         credentials: true,
     });
 

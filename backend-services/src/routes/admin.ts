@@ -261,7 +261,7 @@ export default async function adminRoutes(fastifyInstance: FastifyInstance) {
             type: 'object',
             properties: {
                 search: { type: 'string' },
-                status: { type: 'string', enum: ['pending', 'verified', 'rejected'] },
+                status: { type: 'string', enum: ['pending', 'verified', 'rejected', 'unverified', 'under_review', 'reverify', 'suspended'] },
                 limit: { type: 'integer', minimum: 1, maximum: 1000, default: 20 },
                 offset: { type: 'integer', minimum: 0, default: 0 }
             },
@@ -272,15 +272,23 @@ export default async function adminRoutes(fastifyInstance: FastifyInstance) {
     fastify.get('/providers', { schema: listProvidersSchema }, async (request, reply) => {
         const { search, status, limit = 20, offset = 0 } = request.query;
         try {
+            // ALWAYS use !inner join to ensure we only get users who actually have a provider_details profile,
+            // regardless of whether their role has been officially updated to 'PROVIDER' yet.
+            const joinType = 'provider_details!inner(*)';
             let query = supabaseAdmin
                 .from('profiles')
-                .select('*, provider_details(*)', { count: 'exact' })
-                .eq('role', 'PROVIDER')
+                .select(`*, ${joinType}`, { count: 'exact' })
                 .order('created_at', { ascending: false })
                 .range(offset, offset + limit - 1);
 
             if (search) {
-                query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
+                // Check if search looks like a UUID for exact ID match
+                const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(search);
+                if (isUUID) {
+                    query = query.or(`id.eq.${search},full_name.ilike.%${search}%,email.ilike.%${search}%`);
+                } else {
+                    query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
+                }
             }
             if (status) {
                 query = query.eq('provider_details.verification_status', status);
@@ -402,7 +410,7 @@ export default async function adminRoutes(fastifyInstance: FastifyInstance) {
             const { data: recentBookings } = await supabaseAdmin
                 .from('bookings')
                 .select(`
-                    id, booking_number, status, total_amount, created_at,
+                    id, booking_number, status, total_amount, created_at, service_name_snapshot,
                     customer:profiles!bookings_customer_id_fkey(full_name)
                 `)
                 .eq('provider_id', id)
@@ -432,6 +440,45 @@ export default async function adminRoutes(fastifyInstance: FastifyInstance) {
             });
         } catch (err: any) {
             return reply.code(500).send({ error: 'Failed to fetch provider detail.', details: err.message });
+        }
+    });
+
+    // ──────────────────────────────────────────────
+    // GET /api/v1/admin/providers/:id/documents — Fetch KYC assets with signed URLs
+    // ──────────────────────────────────────────────
+    fastify.get('/providers/:id/documents', { schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } } } }, async (request, reply) => {
+        const { id } = request.params as { id: string };
+        try {
+            const { data: docs, error } = await supabaseAdmin
+                .from('provider_documents')
+                .select('*')
+                .eq('provider_id', id);
+
+            if (error) {
+                if (error.code === 'PGRST205') {
+                    // Table doesn't exist yet, gracefully fallback
+                    return reply.send({ success: true, data: [] });
+                }
+                throw error;
+            }
+            if (!docs || docs.length === 0) return reply.send({ success: true, data: [] });
+
+            // Generate signed URLs for private assets
+            const docsWithUrls = await Promise.all(docs.map(async (doc) => {
+                const { data, error: urlError } = await supabaseAdmin.storage
+                    .from('provider-documents')
+                    .createSignedUrl(doc.document_url, 3600); // 1 hour expiry
+
+                return {
+                    ...doc,
+                    viewUrl: data?.signedUrl || null,
+                    error: urlError ? urlError.message : null
+                };
+            }));
+
+            return reply.send({ success: true, data: docsWithUrls });
+        } catch (err: any) {
+            return reply.code(500).send({ error: 'Failed to fetch provider documents.', details: err.message });
         }
     });
 
@@ -553,126 +600,6 @@ export default async function adminRoutes(fastifyInstance: FastifyInstance) {
     });
 
     // ══════════════════════════════════════════════
-    // CATALOG — Categories CRUD
-    // ══════════════════════════════════════════════
-
-    // GET /api/v1/admin/categories — List all categories
-    fastify.get('/categories', async (request, reply) => {
-        try {
-            const { data, error } = await supabaseAdmin
-                .from('service_categories')
-                .select('*')
-                .order('priority_number', { ascending: false })
-                .order('name', { ascending: true });
-            if (error) throw error;
-            return reply.send({ success: true, data });
-        } catch (err: any) {
-            return reply.code(500).send({ error: 'Failed to fetch categories.', details: err.message });
-        }
-    });
-
-    // GET /api/v1/admin/categories/:id — Get category detail
-    fastify.get('/categories/:id', { schema: { params: { type: 'object', properties: { id: { type: 'string', format: 'uuid' } } } } }, async (request, reply) => {
-        const { id } = request.params as any;
-        try {
-            const { data, error } = await supabaseAdmin.from('service_categories').select('*').eq('id', id).single();
-            if (error) throw error;
-            return reply.send({ success: true, data });
-        } catch (err: any) {
-            return reply.code(err.code === 'PGRST116' ? 404 : 500).send({ error: 'Failed to fetch category details.', details: err.message });
-        }
-    });
-
-    // POST /api/v1/admin/categories — Create a category
-    const createCategorySchema = {
-        body: {
-            type: 'object',
-            required: ['name'],
-            properties: {
-                name: { type: 'string', minLength: 2 },
-                description: { type: 'string' },
-                icon_name: { type: 'string' },
-                image_url: { type: 'string' },
-                priority_number: { type: 'integer' },
-                display_order: { type: 'integer' },
-                is_active: { type: 'boolean', default: true }
-            }
-        }
-    } as const;
-
-    fastify.post('/categories', { schema: createCategorySchema }, async (request, reply) => {
-        const body = request.body as any;
-        try {
-            const slug = body.name.toLowerCase().replace(/\s+/g, '-');
-            const priorityNumber = body.priority_number ?? body.display_order ?? 0;
-            const displayOrder = body.display_order ?? body.priority_number ?? 0;
-            
-            const { data, error } = await supabaseAdmin
-                .from('service_categories')
-                .insert([{ ...body, slug, priority_number: priorityNumber, display_order: displayOrder }])
-                .select()
-                .single();
-            if (error) throw error;
-            await cache.invalidatePattern('services:*');
-            return reply.code(201).send({ success: true, data });
-        } catch (err: any) {
-            return reply.code(500).send({ error: 'Failed to create category.', details: err.message });
-        }
-    });
-
-    // PATCH /api/v1/admin/categories/:id — Update a category
-    const updateCategorySchema = {
-        params: { type: 'object', properties: { id: { type: 'string', format: 'uuid' } } },
-        body: {
-            type: 'object',
-            properties: {
-                name: { type: 'string' },
-                description: { type: 'string' },
-                icon_name: { type: 'string' },
-                image_url: { type: 'string' },
-                priority_number: { type: 'integer' },
-                display_order: { type: 'integer' },
-                is_active: { type: 'boolean' }
-            }
-        }
-    } as const;
-
-    fastify.patch('/categories/:id', { schema: updateCategorySchema }, async (request, reply) => {
-        const { id } = request.params as any;
-        const body = request.body as any;
-        try {
-            const updates: any = { ...body, updated_at: new Date().toISOString() };
-            if (body.priority_number !== undefined) updates.display_order = body.priority_number;
-            if (body.display_order !== undefined) updates.priority_number = body.display_order;
-
-            const { data, error } = await supabaseAdmin
-                .from('service_categories')
-                .update(updates)
-                .eq('id', id)
-                .select()
-                .single();
-            if (error) throw error;
-            await cache.invalidatePattern('services:*');
-            return reply.send({ success: true, data });
-        } catch (err: any) {
-            return reply.code(500).send({ error: 'Failed to update category.', details: err.message });
-        }
-    });
-
-    // DELETE /api/v1/admin/categories/:id — Delete a category
-    fastify.delete('/categories/:id', { schema: { params: { type: 'object', properties: { id: { type: 'string', format: 'uuid' } } } } }, async (request, reply) => {
-        const { id } = request.params as any;
-        try {
-            const { error } = await supabaseAdmin.from('service_categories').delete().eq('id', id);
-            if (error) throw error;
-            await cache.invalidatePattern('services:*');
-            return reply.send({ success: true, message: 'Category deleted.' });
-        } catch (err: any) {
-            return reply.code(500).send({ error: 'Failed to delete category.', details: err.message });
-        }
-    });
-
-    // ══════════════════════════════════════════════
     // CATALOG — Services CRUD
     // ══════════════════════════════════════════════
 
@@ -715,7 +642,6 @@ export default async function adminRoutes(fastifyInstance: FastifyInstance) {
                 image_url: { type: ['string', 'null'] },
                 priority_number: { type: 'integer', default: 0 },
                 is_active: { type: 'boolean', default: true },
-                category: { type: 'string' },
                 is_popular: { type: 'boolean', default: false },
                 is_smart_pick: { type: 'boolean', default: false },
                 is_recommended: { type: 'boolean', default: false }
@@ -758,7 +684,6 @@ export default async function adminRoutes(fastifyInstance: FastifyInstance) {
                 image_url: { type: ['string', 'null'] },
                 priority_number: { type: 'integer' },
                 is_active: { type: 'boolean' },
-                category: { type: 'string' },
                 is_popular: { type: 'boolean' },
                 is_smart_pick: { type: 'boolean' },
                 is_recommended: { type: 'boolean' }
@@ -770,13 +695,17 @@ export default async function adminRoutes(fastifyInstance: FastifyInstance) {
         const { id } = request.params;
         const body = request.body;
         try {
+            console.log('UPDATING SERVICE:', id, body);
             const { data, error } = await supabaseAdmin
                 .from('services')
                 .update({ ...body, updated_at: new Date().toISOString() })
                 .eq('id', id)
                 .select()
                 .single();
-            if (error) throw error;
+            if (error) {
+                console.error('DATABASE ERROR DURING SERVICE UPDATE:', error);
+                throw error;
+            }
             await cache.invalidatePattern('services:*');
             await cache.invalidate(`service:${id}`);
             fastify.log.info({ action: 'admin.service.update', serviceId: id }, 'Service updated by admin');
@@ -947,13 +876,17 @@ export default async function adminRoutes(fastifyInstance: FastifyInstance) {
             if (body.display_order !== undefined) updates.priority_number = body.display_order;
             if (body.priority_number !== undefined) updates.display_order = body.priority_number;
 
+            console.log('UPDATING SUB-SERVICE:', id, updates);
             const { data, error } = await supabaseAdmin
                 .from('service_subcategories')
                 .update({ ...updates, updated_at: new Date().toISOString() })
                 .eq('id', id)
                 .select()
                 .single();
-            if (error) throw error;
+            if (error) {
+                console.error('DATABASE ERROR DURING SUB-SERVICE UPDATE:', error);
+                throw error;
+            }
             await cache.invalidatePattern('services:*');
             if (data.service_id) await cache.invalidate(`subcategories:${data.service_id}`);
             fastify.log.info({ action: 'admin.subcategory.update', subId: id }, 'Subcategory updated by admin');

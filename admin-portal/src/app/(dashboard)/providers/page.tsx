@@ -18,13 +18,15 @@ import {
     Wrench,
     XCircle
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense, useCallback } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; dot: string }> = {
     verified: { label: 'Verified', color: 'text-green-700', bg: 'bg-green-50 border-green-200', dot: 'bg-green-500' },
-    pending: { label: 'Action Required', color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200', dot: 'bg-amber-500' },
+    pending: { label: 'KYC Pending', color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200', dot: 'bg-amber-500' },
+    unverified: { label: 'Profile Only', color: 'text-gray-600', bg: 'bg-gray-50 border-gray-200', dot: 'bg-gray-400' },
     under_review: { label: 'In Review', color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200', dot: 'bg-blue-500' },
-    reverify: { label: 'Re-Verify', color: 'text-purple-700', bg: 'bg-purple-50 border-purple-200', dot: 'bg-purple-500' },
+    reverify: { label: 'Action Required', color: 'text-purple-700', bg: 'bg-purple-50 border-purple-200', dot: 'bg-purple-500' },
     suspended: { label: 'Suspended', color: 'text-gray-700', bg: 'bg-gray-50 border-gray-200', dot: 'bg-gray-500' },
     rejected: { label: 'Rejected', color: 'text-red-700', bg: 'bg-red-50 border-red-200', dot: 'bg-red-500' },
 };
@@ -34,9 +36,19 @@ import BookingSidebar from '@/components/admin/BookingSidebar';
 import CustomerSidebar from '@/components/admin/CustomerSidebar';
 
 export default function ProvidersPage() {
+    return (
+        <Suspense fallback={<div>Loading...</div>}>
+            <ProvidersPageContent />
+        </Suspense>
+    );
+}
+
+function ProvidersPageContent() {
     const [providers, setProviders] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
+    const searchParams = useSearchParams();
+    const initialSearch = searchParams.get('search') || '';
+    const [searchTerm, setSearchTerm] = useState(initialSearch);
     const [activeTab, setActiveTab] = useState('all');
 
     // Side-panel State
@@ -44,16 +56,17 @@ export default function ProvidersPage() {
     const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
     const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
 
-    const supabase = createClient();
-
-    useEffect(() => {
-        fetchProviders();
-    }, []);
-
-    const fetchProviders = async () => {
+    const fetchProviders = useCallback(async (search?: string, status?: string) => {
         setLoading(true);
         try {
-            const { data, error } = await adminApi.get('/api/v1/admin/providers');
+            const params = new URLSearchParams();
+            const s = search ?? searchTerm;
+            const t = status ?? activeTab;
+            if (s) params.append('search', s);
+            if (t && t !== 'all') params.append('status', t);
+            params.append('limit', '200');
+
+            const { data, error } = await adminApi.get(`/api/v1/admin/providers?${params.toString()}`);
 
             if (error) {
                 console.error('Error fetching providers:', error);
@@ -68,7 +81,12 @@ export default function ProvidersPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [searchTerm, activeTab]);
+
+    // Fetch on mount and whenever search/tab changes
+    useEffect(() => {
+        fetchProviders();
+    }, [fetchProviders]);
 
     const updateStatus = async (providerId: string, nextStatus: string) => {
         const { error } = await adminApi.patch(`/api/v1/admin/providers/${providerId}`, {
@@ -78,15 +96,8 @@ export default function ProvidersPage() {
         if (!error) fetchProviders();
     };
 
-    const filtered = providers.filter(p => {
-        const matchesSearch =
-            p.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            p.provider_details?.[0]?.business_name?.toLowerCase().includes(searchTerm.toLowerCase());
-
-        const matchesTab = activeTab === 'all' || p.provider_details?.[0]?.verification_status === activeTab;
-
-        return matchesSearch && matchesTab;
-    });
+    // Use providers directly - server already filtered
+    const filtered = providers;
 
     const exportToCSV = () => {
         const headers = ['ID', 'Full Name', 'Business Name', 'Phone', 'Email', 'Verification Status', 'Avg Rating', 'Jobs Completed'];
@@ -115,7 +126,8 @@ export default function ProvidersPage() {
 
     const TABS = [
         { id: 'all', label: 'All Partners' },
-        { id: 'pending', label: 'Verification Queue' },
+        { id: 'pending', label: 'KYC Queue' },
+        { id: 'unverified', label: 'Registration Only' },
         { id: 'verified', label: 'Verified Partners' },
         { id: 'suspended', label: 'Suspended' },
     ];
@@ -277,6 +289,7 @@ export default function ProvidersPage() {
                     setSelectedProviderId(null);
                     setSelectedBookingId(id);
                 }}
+                onStatusUpdate={fetchProviders}
             />
             <BookingSidebar 
                 bookingId={selectedBookingId} 

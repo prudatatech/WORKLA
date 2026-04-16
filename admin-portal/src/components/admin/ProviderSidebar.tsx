@@ -11,21 +11,25 @@ import {
     ChevronRight,
     MapPin,
     FileText,
-    Activity
+    Activity,
+    XCircle
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { createClient } from '@/utils/supabase/client';
 
 interface ProviderSidebarProps {
     providerId: string | null;
     onClose: () => void;
     onViewBooking: (bookingId: string) => void;
+    onStatusUpdate?: () => void;
 }
 
-export default function ProviderSidebar({ providerId, onClose, onViewBooking }: ProviderSidebarProps) {
+import { adminApi } from '@/utils/api';
+
+export default function ProviderSidebar({ providerId, onClose, onViewBooking, onStatusUpdate }: ProviderSidebarProps) {
     const [provider, setProvider] = useState<any>(null);
+    const [documents, setDocuments] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
-    const supabase = createClient();
+    const [updating, setUpdating] = useState(false);
 
     useEffect(() => {
         if (providerId) {
@@ -36,31 +40,38 @@ export default function ProviderSidebar({ providerId, onClose, onViewBooking }: 
     const fetchProviderDetail = async () => {
         setLoading(true);
         try {
-            // Fetch from rich detail route or direct join
-            const { data, error } = await supabase
-                .from('profiles')
-                .select(`
-                    *,
-                    provider_details(*)
-                `)
-                .eq('id', providerId)
-                .single();
+            // Fetch provider profile + recent bookings via backend admin API
+            // (uses supabaseAdmin with service_role key, bypasses RLS)
+            const { data, error } = await adminApi.get(`/api/v1/admin/providers/${providerId}`);
 
             if (data) {
-                // Get recent bookings and stats
-                const { data: recent } = await supabase
-                    .from('vw_booking_summary_fast')
-                    .select('*')
-                    .eq('provider_id', providerId)
-                    .order('created_at', { ascending: false })
-                    .limit(5);
-                
-                setProvider({ ...data, recentBookings: recent || [] });
+                setProvider({ ...data, recentBookings: data.recentBookings || [] });
+
+                // Fetch Documents (via backend to get signed URLs)
+                const { data: docsRes } = await adminApi.get(`/api/v1/admin/providers/${providerId}/documents`);
+                if (docsRes) setDocuments(docsRes);
             }
         } catch (err) {
             console.error(err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleStatusUpdate = async (status: string) => {
+        setUpdating(true);
+        try {
+            const { error } = await adminApi.patch(`/api/v1/admin/providers/${providerId}`, {
+                verification_status: status
+            });
+            if (!error) {
+                if (onStatusUpdate) onStatusUpdate();
+                onClose();
+            }
+        } catch (err) {
+            console.error('Failed to update status:', err);
+        } finally {
+            setUpdating(false);
         }
     };
 
@@ -101,10 +112,10 @@ export default function ProviderSidebar({ providerId, onClose, onViewBooking }: 
                                     )}
                                 </div>
                                 <div className="flex-1">
-                                    <h3 className="text-xl font-black tracking-tight">{provider.provider_details?.[0]?.business_name || 'Individual Partner'}</h3>
+                                    <h3 className="text-xl font-black tracking-tight">{ (Array.isArray(provider.provider_details) ? provider.provider_details[0] : provider.provider_details)?.business_name || 'Individual Partner'}</h3>
                                     <div className="flex items-center gap-2 mt-1 px-3 py-1 bg-white/10 rounded-lg w-fit">
                                         <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-blue-100">{provider.provider_details?.[0]?.verification_status}</span>
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-blue-100">{ (Array.isArray(provider.provider_details) ? provider.provider_details[0] : provider.provider_details)?.verification_status}</span>
                                     </div>
                                     <div className="flex items-center gap-4 mt-4">
                                         <div className="text-center">
@@ -172,28 +183,59 @@ export default function ProviderSidebar({ providerId, onClose, onViewBooking }: 
                             <section className="space-y-4">
                                 <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em]">Verification Assets</h3>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div className="p-5 bg-white border border-gray-100 rounded-[28px] space-y-3 shadow-sm hover:border-blue-100 transition-colors">
-                                        <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
-                                            <FileText className="w-5 h-5 text-blue-600" />
+                                    {documents.length > 0 ? documents.map((doc) => (
+                                        <div key={doc.id} className="p-5 bg-white border border-gray-100 rounded-[28px] space-y-3 shadow-sm hover:border-blue-100 transition-colors">
+                                            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
+                                                <FileText className="w-5 h-5 text-blue-600" />
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-900 uppercase leading-none">{doc.document_type.replace('_', ' ')}</p>
+                                                <p className="text-[9px] font-bold text-gray-400 mt-1 uppercase">Uploaded Assets</p>
+                                            </div>
+                                            <button 
+                                                onClick={() => doc.viewUrl && window.open(doc.viewUrl, '_blank')}
+                                                className="w-full py-2 bg-gray-50 text-[10px] font-black text-gray-500 rounded-lg hover:bg-blue-600 hover:text-white transition-all uppercase tracking-widest"
+                                            >
+                                                View Document
+                                            </button>
                                         </div>
-                                        <div>
-                                            <p className="text-[10px] font-black text-gray-900 uppercase leading-none">KYC Document</p>
-                                            <p className="text-[9px] font-bold text-gray-400 mt-1 uppercase">Identity Verification</p>
+                                    )) : (
+                                        <div className="col-span-2 p-10 border-2 border-dashed border-gray-100 rounded-[32px] text-center text-gray-300">
+                                            <FileText className="w-10 h-10 mx-auto opacity-20 mb-3" />
+                                            <p className="text-xs font-bold uppercase tracking-widest">No Documents Uploaded</p>
                                         </div>
-                                        <button className="w-full py-2 bg-gray-50 text-[10px] font-black text-gray-500 rounded-lg hover:bg-blue-600 hover:text-white transition-all uppercase tracking-widest">View PDF</button>
-                                    </div>
-                                    <div className="p-5 bg-white border border-gray-100 rounded-[28px] space-y-3 shadow-sm hover:border-blue-100 transition-colors">
-                                        <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center">
-                                            <MapPin className="w-5 h-5 text-indigo-600" />
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] font-black text-gray-900 uppercase leading-none">Residence Proof</p>
-                                            <p className="text-[9px] font-bold text-gray-400 mt-1 uppercase">Address Verification</p>
-                                        </div>
-                                        <button className="w-full py-2 bg-gray-50 text-[10px] font-black text-gray-500 rounded-lg hover:bg-blue-600 hover:text-white transition-all uppercase tracking-widest">View File</button>
-                                    </div>
+                                    )}
                                 </div>
                             </section>
+
+                            {/* 5. Approval Footer */}
+                            {((Array.isArray(provider.provider_details) ? provider.provider_details[0] : provider.provider_details)?.verification_status !== 'verified') && (
+                                <section className="p-6 bg-gray-50 rounded-[32px] border border-gray-100 space-y-4">
+                                    <div className="flex items-center gap-4">
+                                        <button 
+                                            disabled={updating}
+                                            onClick={() => handleStatusUpdate('reverify')}
+                                            className="flex-1 py-4 bg-white border border-red-100 text-red-600 text-xs font-black rounded-[20px] hover:bg-red-50 transition-all uppercase tracking-widest flex items-center justify-center gap-2"
+                                        >
+                                            <XCircle className="w-4 h-4" />
+                                            Needs Update
+                                        </button>
+                                        <button 
+                                            disabled={updating}
+                                            onClick={() => handleStatusUpdate('verified')}
+                                            className="flex-[2] py-4 bg-green-600 text-white text-xs font-black rounded-[20px] shadow-lg shadow-green-100 hover:bg-green-700 transition-all uppercase tracking-widest flex items-center justify-center gap-2"
+                                        >
+                                            {updating ? 'Processing...' : (
+                                                <>
+                                                    <ShieldCheck className="w-4 h-4" />
+                                                    Approve Partner
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                    <p className="text-[9px] text-center text-gray-400 font-bold uppercase tracking-widest">This action will instantly notify the provider and unlock their dashboard.</p>
+                                </section>
+                            )}
 
                             <div className="h-20" />
                         </>

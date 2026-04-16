@@ -4,7 +4,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as TaskManager from 'expo-task-manager';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import { Buffer } from 'buffer';
 
 // Fix for react-native-svg / lucide-react-native buffer dependency
