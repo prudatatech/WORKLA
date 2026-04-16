@@ -25,7 +25,7 @@ import { useAddressStore } from '../../lib/addressStore';
 import { api } from '../../lib/api';
 import { localCache } from '../../lib/localCache';
 import { supabase } from '../../lib/supabase';
-import { Bell, ChevronRight, Menu, Search } from 'lucide-react-native';
+import { ChevronRight } from 'lucide-react-native';
 import { PRIMARY, getBgForCategory, getColorForCategory, getIconForCategory } from '../../lib/ui-constants';
 
 const { width } = Dimensions.get('window');
@@ -59,15 +59,13 @@ export default function HomeScreen() {
   const [recentBookings, setRecentBookings] = useState<any[]>([]);
   const [activeBooking, setActiveBooking] = useState<any>(null);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [_firstName, _setFirstName] = useState('');
-  const [loyaltyCoins, setLoyaltyCoins] = useState(0);
-  const [_walletBalance, _setWalletBalance] = useState(0);
+  const [loyaltyCoins] = useState(0);
   const [unratedBooking, setUnratedBooking] = useState<any>(null);
   const [banners, setBanners] = useState<Banner[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [drafts, setDrafts] = useState<any[]>([]);
 
-  const { selectedAddress, rawLocationName, setRawLocationName, setSelectedAddress, autoDetectAddress } = useAddressStore();
+  const { selectedAddress, rawLocationName, setRawLocationName, autoDetectAddress } = useAddressStore();
 
   // ── Animation ──
   const notifPulse = useRef(new Animated.Value(1)).current;

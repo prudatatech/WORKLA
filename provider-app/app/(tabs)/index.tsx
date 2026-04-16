@@ -131,10 +131,10 @@ export default function ProviderHomeScreen() {
     });
   }, []);
 
-  const loadStats = useCallback(async () => {
+  const loadStats = useCallback(async (force = false) => {
     // ── Instant: Show cached stats while refreshing ──
     const cached = await localCache.get<any>('provider:stats');
-    if (cached) {
+    if (cached && !force) {
       setTodayEarnings(cached.todayEarnings || 0);
       setTodayJobs(cached.todayJobs || 0);
       setRating(cached.rating || 0);
@@ -142,6 +142,7 @@ export default function ProviderHomeScreen() {
       setProviderName(cached.providerName || 'Provider');
       if (cached.isOnline !== undefined) setIsOnline(cached.isOnline);
       setLoading(false); // Show content immediately from cache
+      return; // Skip server call if we have valid cache and not forced
     }
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -367,33 +368,49 @@ export default function ProviderHomeScreen() {
 
 
 
-
   const toggleOnline = async () => {
-    if (toggling) return; // prevent double-tap
+    if (toggling) return;
 
-    const cached = await localCache.get<any>('provider:stats');
-    const status = cached?.verificationStatus;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setToggling(true);
+
+    // ── Optimized: Silent fresh check if cache says unverified ──
+    let status = (await localCache.get<any>('provider:stats'))?.verificationStatus;
+    
+    if (status === 'unverified' || !status) {
+        // Force a fresh check from server to bypass stale 5-min cache
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData.user) {
+            const { data: sp } = await supabase.from('provider_details').select('verification_status').eq('provider_id', userData.user.id).single();
+            status = sp?.verification_status;
+            // Update cache immediately if it was stale
+            if (status) {
+                const cur = await localCache.get<any>('provider:stats') || {};
+                localCache.set('provider:stats', { ...cur, verificationStatus: status }, 300);
+            }
+        }
+    }
 
     if (status === 'unverified') {
         Alert.alert('Action Required', 'Please complete your KYC and bank details to go online.', [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Complete KYC', onPress: () => router.push('/kyc' as any) }
+            { text: 'Cancel', style: 'cancel', onPress: () => setToggling(false) },
+            { text: 'Complete KYC', onPress: () => { setToggling(false); router.push('/kyc' as any); } }
         ]);
         return;
     }
 
     if (status === 'pending') {
         Alert.alert('Under Review', 'Your KYC documents are currently being reviewed by our Admin team. You will be able to go online once approved.');
+        setToggling(false);
         return;
     }
 
     if (status === 'rejected' || status === 'suspended' || status === 'reverify') {
         Alert.alert('Action Required', 'Your profile is currently suspended or rejected. Please contact support.');
+        setToggling(false);
         return;
     }
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setToggling(true);
     const newVal = !isOnline;
 
     // ⚡ Optimistic: flip toggle INSTANTLY — feels responsive on first press

@@ -1,14 +1,9 @@
 import * as SplashScreen from 'expo-splash-screen';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useRef, useState } from 'react';
-import { AppState, AppStateStatus, Platform } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import { Buffer } from 'buffer';
-
-// Fix for react-native-svg / lucide-react-native buffer dependency
-if (typeof global.Buffer === 'undefined') {
-  global.Buffer = Buffer;
-}
 import NetworkBanner from '../components/NetworkBanner';
 import InAppToast from '../components/InAppToast';
 import LoadingScreen from '../components/LoadingScreen';
@@ -72,7 +67,7 @@ export default function RootLayout() {
       // User is logged in but on a non-authenticated screen — redirect to home
       router.replace('/(tabs)');
     }
-  }, [session, initialized, segments]);
+  }, [session, initialized, segments, router]);
 
   // 🛡️ AppState lifecycle: pause/resume realtime when app backgrounds/foregrounds
   useEffect(() => {
@@ -99,7 +94,7 @@ export default function RootLayout() {
 
     const sub = AppState.addEventListener('change', handleAppStateChange);
     return () => sub.remove();
-  }, [session]);
+  }, [session, subscribeToNotifications]);
 
   // Socket.io real-time alerts — uses the AppState-aware socketService
   useEffect(() => {
@@ -128,7 +123,7 @@ export default function RootLayout() {
   }, [session]);
 
   // Supabase Realtime: listen for new rows in `notifications` table
-  const subscribeToNotifications = (userId: string) => {
+  const subscribeToNotifications = useCallback((userId: string) => {
     // Clean up any existing channel first
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
@@ -151,7 +146,7 @@ export default function RootLayout() {
       .subscribe();
 
     channelRef.current = channel;
-  };
+  }, []);
 
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -164,7 +159,7 @@ export default function RootLayout() {
         channelRef.current = null;
       }
     };
-  }, [session]);
+  }, [session, subscribeToNotifications]);
 
   const showToast = (title: string, body: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
     setToast({ visible: true, title, body, type });

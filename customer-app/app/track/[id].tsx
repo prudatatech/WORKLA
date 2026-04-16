@@ -18,7 +18,6 @@ import {
     Alert,
     Animated,
     AppState,
-    Dimensions,
     Image,
     Linking,
     ScrollView,
@@ -33,6 +32,8 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import RescheduleModal from '../../components/bookings/RescheduleModal';
 import NearbyWorkers from '../../components/bookings/NearbyWorkers';
+import CancelModal from '../../components/bookings/CancelModal';
+import SearchingProvider from '../../components/SearchingProvider';
 import { api } from '../../lib/api';
 import { socketService } from '../../lib/socket';
 import { supabase } from '../../lib/supabase';
@@ -421,7 +422,11 @@ export default function TrackingScreen() {
             if (res.invoiceUrl) {
                 Linking.openURL(res.invoiceUrl);
             }
-        } catch (_err) {
+            if (res.invoiceUrl) {
+                Linking.openURL(res.invoiceUrl);
+            }
+        } catch (err) {
+            console.error('Download invoice error:', err);
             Alert.alert('Error', 'Failed to fetch invoice. Please try again.');
         } finally {
             setInvoiceLoading(false);
@@ -450,7 +455,8 @@ export default function TrackingScreen() {
                                 }]);
                             }
                             Alert.alert('🆘 SOS ACTIVE', 'Our high-priority safety team has been alerted with your live GPS coordinates. Assistance is on the way.');
-                        } catch (_err) {
+                        } catch (err) {
+                            console.error('SOS error:', err);
                             Alert.alert('🆘 SOS ACTIVE', 'Emergency alert broadcasted via fallback satellite network.');
                         }
                     },

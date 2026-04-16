@@ -29,7 +29,6 @@ function MyBookingsScreen() {
   const [customReason, setCustomReason] = useState<string>('');
   const [cancelling, setCancelling] = useState(false);
   const [isLiveUpdating, setIsLiveUpdating] = useState(false);
-  const [_loyaltyCoins, _setLoyaltyCoins] = useState(0);
   const hasMountedRef = useRef(false);
 
   const router = useRouter();
