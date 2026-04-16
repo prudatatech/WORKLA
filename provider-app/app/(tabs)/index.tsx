@@ -67,6 +67,13 @@ export default function ProviderHomeScreen() {
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
 
+  // ⚡ Instantly restore online status from persistent cache (no "Offline" flash)
+  useEffect(() => {
+    localCache.get<boolean>('provider:isOnline').then(cached => {
+      if (cached === true || cached === false) setIsOnline(cached);
+    });
+  }, []);
+
   useEffect(() => {
     if (isOnline) {
       Animated.loop(Animated.sequence([
@@ -153,7 +160,7 @@ export default function ProviderHomeScreen() {
       setRating(cached.rating || 0);
       setWeeklyData(cached.weeklyData || [0,0,0,0,0,0,0]);
       setProviderName(cached.providerName || 'Provider');
-      if (cached.isOnline !== undefined) setIsOnline(cached.isOnline);
+      // isOnline is NOT read from stats cache — it has its own persistent key.
       setLoading(false); // Show content immediately from cache
       if (!force) {
         // Still fetch live in background — do NOT return early.
@@ -223,9 +230,11 @@ export default function ProviderHomeScreen() {
           rating: d.rating || providerRes.data?.avg_rating || 0,
           weeklyData: d.weeklyData || [0,0,0,0,0,0,0],
           providerName: providerRes.data?.business_name || 'Provider',
-          isOnline: providerRes.data?.is_online ?? false,
           verificationStatus: providerRes.data?.verification_status || 'unverified'
-        }, 60); // 60s TTL — keeps UI snappy without going stale
+        }, 300); // 5min TTL for analytics (isOnline stored separately)
+
+        // Persist the live online status to its own permanent key
+        localCache.set('provider:isOnline', providerRes.data?.is_online ?? false, 86400); // 24h TTL
       }
 
       if (activeJobRes.data && activeJobRes.data.length > 0) {
@@ -441,6 +450,9 @@ export default function ProviderHomeScreen() {
         setIsOnline(!newVal); // rollback on failure
         throw new Error('Failed to update status. Please try again.');
       }
+
+      // ✅ Persist new status permanently so next cold-start shows correct state
+      await localCache.set('provider:isOnline', newVal, 86400); // 24h TTL
 
       if (newVal) startLocationTracking(user.id); else stopLocationTracking();
     } catch (e: any) { Alert.alert('Error', e.message); }
