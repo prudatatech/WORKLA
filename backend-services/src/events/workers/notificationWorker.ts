@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../../lib/supabase';
 import { emitToUser } from '../../socket';
 import { EventBus } from '../bus';
 import { InvoiceService } from '../../services/invoiceService';
+import { PushNotificationService } from '../../services/pushNotificationService';
 
 /**
  * Notification & Dispatch Worker
@@ -50,6 +51,28 @@ export async function startNotificationWorker() {
             type,
             data: payload
         });
+
+        // 3. 🚀 Push Notification Delivery (for "Always On")
+        // We always try to send a push for critical events (jobs, payouts, verified)
+        // because the user might have the app in background or killed.
+        try {
+            const { data: profile } = await supabaseAdmin
+                .from('profiles')
+                .select('expo_push_token')
+                .eq('id', userId)
+                .single();
+            
+            if (profile?.expo_push_token) {
+                await PushNotificationService.sendNotification(
+                    profile.expo_push_token,
+                    title,
+                    body,
+                    { ...payload, type }
+                );
+            }
+        } catch (pushErr: any) {
+            console.error(`[Worker ⚠️] Push delivery skipped for ${userId}:`, pushErr.message);
+        }
     }
 
     /**

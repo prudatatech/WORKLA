@@ -1,8 +1,8 @@
 import * as Haptics from 'expo-haptics';
-import * as Location from 'expo-location';
-import { safeRequestPermissions, safeScheduleNotification, safeSetNotificationHandler } from '../../lib/notifications';
-import { useFocusEffect, useRouter } from 'expo-router';
 import * as TaskManager from 'expo-task-manager';
+import * as Location from 'expo-location';
+import { safeRequestPermissions, safeScheduleNotification, safeSetNotificationHandler, getPushTokenAsync } from '../../lib/notifications';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { AlertTriangle, ChevronRight } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Animated, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, Vibration, View } from 'react-native';
@@ -129,12 +129,25 @@ export default function ProviderHomeScreen() {
             shouldSetBadge: false,
         }),
     });
+
+    // 🚀 Register for Remote Push Notifications (Always On Support)
+    (async () => {
+        const token = await getPushTokenAsync();
+        if (token) {
+            try {
+                await api.patch('/api/v1/users/push-token', { token });
+                console.warn('[Sync] Push token registered with backend');
+            } catch (err) {
+                console.error('[Sync] Failed to register push token:', err);
+            }
+        }
+    })();
   }, []);
 
   const loadStats = useCallback(async (force = false) => {
-    // ── Instant: Show cached stats while refreshing ──
+    // ── Instant: Show cached stats while refreshing in background ──
     const cached = await localCache.get<any>('provider:stats');
-    if (cached && !force) {
+    if (cached) {
       setTodayEarnings(cached.todayEarnings || 0);
       setTodayJobs(cached.todayJobs || 0);
       setRating(cached.rating || 0);
@@ -142,7 +155,10 @@ export default function ProviderHomeScreen() {
       setProviderName(cached.providerName || 'Provider');
       if (cached.isOnline !== undefined) setIsOnline(cached.isOnline);
       setLoading(false); // Show content immediately from cache
-      return; // Skip server call if we have valid cache and not forced
+      if (!force) {
+        // Still fetch live in background — do NOT return early.
+        // The live fetch below will correct any stale verification_status.
+      }
     }
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -191,7 +207,7 @@ export default function ProviderHomeScreen() {
         }
 
         const currentCache = await localCache.get<any>('provider:stats') || {};
-        localCache.set('provider:stats', { ...currentCache, verificationStatus: sp.verification_status }, 300);
+        localCache.set('provider:stats', { ...currentCache, verificationStatus: sp.verification_status }, 60);
       }
 
       if (analyticsRes.data) {
@@ -209,7 +225,7 @@ export default function ProviderHomeScreen() {
           providerName: providerRes.data?.business_name || 'Provider',
           isOnline: providerRes.data?.is_online ?? false,
           verificationStatus: providerRes.data?.verification_status || 'unverified'
-        }, 300);
+        }, 60); // 60s TTL — keeps UI snappy without going stale
       }
 
       if (activeJobRes.data && activeJobRes.data.length > 0) {

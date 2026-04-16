@@ -63,3 +63,42 @@ export const safeScheduleNotification = async (request: any) => {
     }
     return await Notifications.scheduleNotificationAsync(request);
 };
+
+/**
+ * 🚀 Get Expo Push Token
+ * Fetches the unique token needed to send remote push notifications.
+ */
+export const getPushTokenAsync = async () => {
+    if (!IS_NOTIFICATIONS_SAFE) {
+        console.warn('[Notifications] 🚫 Push tokens are not supported in Expo Go (Android).');
+        return null;
+    }
+
+    const Notifications = getNotifications();
+    if (!Notifications) return null;
+
+    try {
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+
+        if (existingStatus !== 'granted') {
+            const { status } = await Notifications.requestPermissionsAsync();
+            finalStatus = status;
+        }
+
+        if (finalStatus !== 'granted') {
+            console.warn('[Notifications] Failed to get push token: Permission not granted');
+            return null;
+        }
+
+        const token = (await Notifications.getExpoPushTokenAsync({
+            projectId: Constants.expoConfig?.extra?.eas?.projectId || Constants.expoConfig?.owner // Use project ID from config
+        })).data;
+
+        console.warn('[Notifications] ✅ Expo Push Token retrieved:', token.substring(0, 15) + '...');
+        return token;
+    } catch (error: any) {
+        console.error('[Notifications] Error getting push token:', error.message);
+        return null;
+    }
+};

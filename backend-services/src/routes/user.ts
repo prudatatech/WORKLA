@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { JsonSchemaToTsProvider } from '@fastify/type-provider-json-schema-to-ts';
 import { supabaseAdmin } from '../lib/supabase';
 import { requireAuth } from '../middlewares/auth';
+import { CommonSchemas } from '../lib/schemas';
 
 export default async function userRoutes(fastifyInstance: FastifyInstance) {
     const fastify = fastifyInstance.withTypeProvider<JsonSchemaToTsProvider>();
@@ -134,6 +135,51 @@ export default async function userRoutes(fastifyInstance: FastifyInstance) {
             });
         } catch (err: any) {
             return reply.code(500).send({ error: 'Failed to fetch stats.', details: err.message });
+        }
+    });
+
+    // ──────────────────────────────────────────────
+    // PATCH /api/v1/users/push-token — Register Expo Push Token
+    // ──────────────────────────────────────────────
+    const updatePushTokenSchema = {
+        body: {
+            type: 'object',
+            required: ['token'],
+            properties: {
+                token: { type: 'string', minLength: 10 }
+            },
+            additionalProperties: false
+        },
+        response: {
+            200: CommonSchemas.SuccessResponse({ type: 'object', properties: { token: { type: 'string' } } }),
+            400: CommonSchemas.ErrorResponse,
+            500: CommonSchemas.ErrorResponse
+        }
+    } as const;
+
+    fastify.patch('/push-token', { schema: updatePushTokenSchema }, async (request, reply) => {
+        const user = request.user;
+        const { token } = request.body;
+
+        try {
+            const { error } = await supabaseAdmin
+                .from('profiles')
+                .update({ 
+                    expo_push_token: token,
+                    updated_at: new Date().toISOString() 
+                })
+                .eq('id', user.sub);
+
+            if (error) throw error;
+
+            request.log.info(`[PushToken] Updated token for user ${user.sub}`);
+
+            return reply.send({ 
+                success: true, 
+                data: { token } 
+            });
+        } catch (err: any) {
+            return reply.code(500).send({ error: 'Failed to update push token.', details: err.message });
         }
     });
 }
