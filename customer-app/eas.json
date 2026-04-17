@@ -11,10 +11,9 @@
                 "buildType": "apk"
             },
             "env": {
-                "EXPO_PUBLIC_SUPABASE_URL": "https://backend.workla.in/supabase",
-                "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2Zm1nbXZyYXJpd3l5eG9odXZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NTcxNDksImV4cCI6MjA4ODEzMzE0OX0.G2uAABNXDNHxRZ2c6DqI0TDOt5eAplQC44a55dZygv0",
-                "EXPO_PUBLIC_API_URL": "https://backend.workla.in",
-                "EXPO_PUBLIC_RAZORPAY_KEY_ID": "rzp_test_SRfZWkk27KDNF8"
+                "EXPO_PUBLIC_SUPABASE_URL": "https://worklabackend.prudata-tech.workers.dev/supabase",
+                "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0d2VreWx6dWN0YXRjZ3lya2ZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMDI0OTEsImV4cCI6MjA5MTY3ODQ5MX0.4HFUbCqiO4pr6Bm6sHZc7Ifj6oHsYfiB5KN8cmZyeJs",
+                "EXPO_PUBLIC_API_URL": "https://worklabackend.prudata-tech.workers.dev"
             }
         },
         "production": {

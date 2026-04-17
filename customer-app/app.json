@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Workla",
-    "owner": "saasuno.info",
+    "owner": "prudata.tech",
     "slug": "customer-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -75,9 +75,7 @@
     },
     "extra": {
       "router": {},
-      "eas": {
-        "projectId": "c567b52d-0d08-4b33-83ba-a58eb282f076"
-      }
+      "eas": {}
     },
     "runtimeVersion": {
       "policy": "appVersion"

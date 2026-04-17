@@ -10,7 +10,7 @@ interface LiveMapProps {
   currentCity: string;
 }
 
-export default function LiveMap({ currentLocation, currentCity }: LiveMapProps) {
+const LiveMap = React.memo(({ currentLocation, currentCity }: LiveMapProps) => {
   return (
     <View style={styles.mapCard}>
       <View style={styles.mapHeader}>
@@ -28,14 +28,31 @@ export default function LiveMap({ currentLocation, currentCity }: LiveMapProps) 
             latitudeDelta: 0.05,
             longitudeDelta: 0.05,
           }}
+          scrollEnabled={false}
+          zoomEnabled={false}
+          pitchEnabled={false}
+          rotateEnabled={false}
           showsUserLocation={true}
+          followsUserLocation={true}
+          showsMyLocationButton={false}
+          showsPointsOfInterest={false}
+          showsBuildings={false}
+          showsTraffic={false}
+          showsIndoors={false}
         >
-          <Marker coordinate={currentLocation} title="You" description={currentCity} />
+          {/* No redundant marker as showsUserLocation is active */}
         </MapView>
       </View>
     </View>
   );
-}
+}, (prev, next) => {
+  // Only re-render if location changed significantly (> 0.0001 degrees)
+  const latDiff = Math.abs(prev.currentLocation.latitude - next.currentLocation.latitude);
+  const lngDiff = Math.abs(prev.currentLocation.longitude - next.currentLocation.longitude);
+  return latDiff < 0.0001 && lngDiff < 0.0001 && prev.currentCity === next.currentCity;
+});
+
+export default LiveMap;
 
 const styles = StyleSheet.create({
   mapCard: { backgroundColor: '#FFF', borderRadius: 24, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: '#F3F4F6', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10 },

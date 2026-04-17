@@ -834,7 +834,7 @@ export default function RequestServiceScreen() {
                     ) : (
                         <>
                             <Text style={styles.nextBtnText}>
-                                {step === 'confirm' ? '🚀 Send Request' : 'Continue'}
+                                {step === 'confirm' ? 'Send Request' : 'Continue'}
                             </Text>
                             {step !== 'confirm' && <ChevronRight size={18} color="#FFF" />}
                         </>

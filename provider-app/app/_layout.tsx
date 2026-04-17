@@ -106,7 +106,11 @@ export default function RootLayout() {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+      setSession((prev: any) => {
+        // Only update if session state actually changed (e.g. user ID or presence)
+        if (prev?.user?.id === session?.user?.id && !!prev === !!session) return prev;
+        return session;
+      });
     });
 
     // 🔔 Push notification tap listener (works from killed/background state)
@@ -130,37 +134,60 @@ export default function RootLayout() {
   }, []);
 
   // 2. Navigation & Onboarding Control
+  const isRedirecting = useRef(false);
+
   useEffect(() => {
-    if (!initialized) return;
+    if (!initialized || isRedirecting.current) return;
 
-    const inOnboarding = segments[0] === 'onboarding';
-    const isResetting = (segments[0] as string) === 'reset-password';
-    const isIndex = !segments[0];
+    const rootSegment = segments[0] as string;
+    const inOnboarding = rootSegment === 'onboarding';
+    const isResetting = rootSegment === 'reset-password';
+    const isTabs = rootSegment === '(tabs)';
+    const isIndex = !rootSegment;
 
-    if (!session) {
-      if (!isIndex && !isResetting) router.replace('/');
-    } else {
-      const checkOnboarding = async () => {
+    const performNavigation = async () => {
+      if (!session) {
+        if (!isIndex && !isResetting) {
+          isRedirecting.current = true;
+          router.replace('/');
+          setTimeout(() => { isRedirecting.current = false; }, 500);
+        }
+      } else {
         try {
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from('provider_details')
             .select('onboarding_completed')
             .eq('provider_id', session.user.id)
             .single();
 
+          if (error) throw error;
+
           if (data?.onboarding_completed) {
-            if (isIndex || inOnboarding) router.replace('/(tabs)');
+            if (!isTabs) {
+              isRedirecting.current = true;
+              router.replace('/(tabs)');
+              setTimeout(() => { isRedirecting.current = false; }, 500);
+            }
           } else {
-            if (!inOnboarding) router.replace('/onboarding');
+            if (!inOnboarding) {
+              isRedirecting.current = true;
+              router.replace('/onboarding');
+              setTimeout(() => { isRedirecting.current = false; }, 500);
+            }
           }
         } catch (e) {
           console.error('Onboarding check failed:', e);
-          if (!inOnboarding) router.replace('/onboarding');
+          if (!inOnboarding && !isTabs) {
+            isRedirecting.current = true;
+            router.replace('/onboarding');
+            setTimeout(() => { isRedirecting.current = false; }, 500);
+          }
         }
-      };
-      checkOnboarding();
-    }
-  }, [session, initialized, segments]);
+      }
+    };
+
+    performNavigation();
+  }, [session?.user?.id, initialized, segments[0]]);
 
   // 3. Socket.io Notification Handler
   useEffect(() => {

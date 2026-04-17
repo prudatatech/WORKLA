@@ -575,7 +575,7 @@ export default function TrackingScreen() {
                     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
                         <SafeAreaView>
                             <View style={styles.receiptHeader}>
-                                <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+                                <TouchableOpacity style={styles.backBtn} onPress={() => router.replace('/(tabs)/' as any)}>
                                     <ArrowLeft size={20} color="#111827" />
                                 </TouchableOpacity>
                                 <Text style={styles.receiptHeaderTitle}>Order Receipt</Text>

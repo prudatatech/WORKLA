@@ -49,6 +49,7 @@ export default function HomeScreen() {
   const realtimeChannelRef = useRef<any>(null);
   const pulseAnimRef = useRef<Animated.CompositeAnimation | null>(null);
   const lastLoadTimeRef = useRef<number>(0); // ⏱ Debounce repeated focus-loads
+  const lastBackgroundTimeRef = useRef<number>(0); // ⏱ Track away time for foreground resume
 
   // ── Data State ──
   const [services, setServices] = useState<any[]>([]);
@@ -60,7 +61,7 @@ export default function HomeScreen() {
   const [recentBookings, setRecentBookings] = useState<any[]>([]);
   const [activeBooking, setActiveBooking] = useState<any>(null);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [loyaltyCoins] = useState(0);
+  const [loyaltyCoins, setLoyaltyCoins] = useState(0);
   const [unratedBooking, setUnratedBooking] = useState<any>(null);
   const [banners, setBanners] = useState<Banner[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -119,9 +120,13 @@ export default function HomeScreen() {
       // If backend returned services, use them
       if (srvRes.data && Array.isArray(srvRes.data)) {
         setServicesError(null);
-        const mapped = srvRes.data.filter((s: any) => (s.priority_number || 0) <= 10);
-        setServices(mapped.map(mapService));
-        localCache.set('home:services', mapped, 600); // Cache for 10 min
+        const mapped = (srvRes.data as any[]).filter((s: any) => (s.priority_number || 0) <= 10).map(mapService);
+        
+        // ⚡ Intelligent State Update: Only update if content changed to prevent flicker
+        setServices(prev => JSON.stringify(prev) === JSON.stringify(mapped) ? prev : mapped);
+        
+        const cacheData = srvRes.data.filter((s: any) => (s.priority_number || 0) <= 10);
+        localCache.set('home:services', cacheData, 600); // Cache for 10 min
       } else {
         // Fallback: load services directly from Supabase when backend is down
         console.warn('[Home] Backend services failed, using Supabase fallback');
@@ -135,7 +140,8 @@ export default function HomeScreen() {
 
           if (fallbackServices && fallbackServices.length > 0) {
             setServicesError(null);
-            setServices(fallbackServices.map(mapService));
+            const mapped = fallbackServices.map(mapService);
+            setServices(prev => JSON.stringify(prev) === JSON.stringify(mapped) ? prev : mapped);
             localCache.set('home:services', fallbackServices, 600);
           } else {
             setServicesError(srvRes.error || 'Services unavailable');
@@ -159,13 +165,14 @@ export default function HomeScreen() {
             const subToCard = (list: any[]) => (list || []).map(item => ({
               ...item, Icon: getIconForCategory(item.slug || 'home'), bg: getBgForCategory(item.slug || 'home'), color: getColorForCategory(item.slug || 'home'),
             }));
-            setPopularServices(subToCard(featuredRes.data.popular));
-            setSmartPickServices(subToCard(featuredRes.data.smartPicks));
-            setRecommendedServices(subToCard(featuredRes.data.recommended));
+            
+            setPopularServices(prev => JSON.stringify(prev) === JSON.stringify(subToCard(featuredRes.data.popular)) ? prev : subToCard(featuredRes.data.popular));
+            setSmartPickServices(prev => JSON.stringify(prev) === JSON.stringify(subToCard(featuredRes.data.smartPicks)) ? prev : subToCard(featuredRes.data.smartPicks));
+            setRecommendedServices(prev => JSON.stringify(prev) === JSON.stringify(subToCard(featuredRes.data.recommended)) ? prev : subToCard(featuredRes.data.recommended));
             localCache.set('home:featured', featuredRes.data, 600);
           }
           if (bannerRes.data && Array.isArray(bannerRes.data)) {
-            setBanners(bannerRes.data);
+            setBanners(prev => JSON.stringify(prev) === JSON.stringify(bannerRes.data) ? prev : bannerRes.data);
             localCache.set('home:banners', bannerRes.data, 600);
           }
         } catch (e) {
@@ -195,9 +202,7 @@ export default function HomeScreen() {
 
           if (meRes.data?.data) {
             const p = meRes.data.data;
-            if (p.full_name) _setFirstName(p.full_name.split(' ')[0]);
             setLoyaltyCoins(p.loyalty_coins || 0);
-            _setWalletBalance(p.wallet_balance || 0);
             setUnreadCount(p.unread_notifications || 0);
             const cur = useAddressStore.getState();
             if (p.city && !cur.selectedAddress && (cur.rawLocationName === 'Detecting location...' || cur.rawLocationName === 'Please select location')) {
@@ -331,6 +336,7 @@ export default function HomeScreen() {
       if (prevState.match(/active/) && nextState.match(/inactive|background/)) {
         // === GOING TO BACKGROUND ===
         console.log('[Home] Backgrounded — pausing animations & realtime');
+        lastBackgroundTimeRef.current = Date.now();
         
         // Stop infinite animation to free CPU
         if (pulseAnimRef.current) {
@@ -353,8 +359,14 @@ export default function HomeScreen() {
         // Re-subscribe realtime
         subscribeToBookingUpdates();
         
-        // Soft refresh data (uses cache-first)
-        loadData();
+        // 🛡️ Soft refresh data — only if it's been > 5 minutes to prevent annoying reloads
+        const awayTime = Date.now() - lastBackgroundTimeRef.current;
+        if (awayTime > 5 * 60 * 1000) {
+          console.log('[Home] Away for > 5m, refreshing data');
+          loadData();
+        } else {
+          console.log('[Home] Away for brief moment, skipping reload');
+        }
       }
     };
 

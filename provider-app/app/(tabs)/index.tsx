@@ -110,51 +110,63 @@ export default function ProviderHomeScreen() {
 
   const startLocationTracking = async (userId: string) => {
     try {
+      // 🛡️ Cleanup existing listener first to prevent leaks
+      if (locationSubRef.current) {
+        locationSubRef.current.remove();
+        locationSubRef.current = null;
+      }
+
       const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
       if (fgStatus !== 'granted') { setCurrentCity('Permission Denied'); return; }
       await Location.requestBackgroundPermissionsAsync();
 
       // ⚡ Get fresh location immediately
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      setCurrentLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-      await api.post('/api/v1/providers/location', { latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+      const { latitude, longitude } = loc.coords;
+      
+      setCurrentLocation({ latitude, longitude });
+      api.post('/api/v1/providers/location', { latitude, longitude });
 
-      const [address] = await Location.reverseGeocodeAsync({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+      const [address] = await Location.reverseGeocodeAsync({ latitude, longitude });
       if (address) {
         const cityStr = address.city || address.subregion || address.district || 'Location Set';
         setCurrentCity(cityStr);
-        localCache.set('provider:location', { 
-          latitude: loc.coords.latitude, 
-          longitude: loc.coords.longitude,
-          city: cityStr 
-        }, 86400);
+        localCache.set('provider:location', { latitude, longitude, city: cityStr }, 86400);
       }
 
-      // 📶 High-frequency background updates (every 30s / every 10m movement)
+      // 📶 High-frequency background updates
       await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
         accuracy: Location.Accuracy.High,
-        timeInterval: 30000,      // Every 30 seconds
-        distanceInterval: 10,     // Every 10 meters
+        timeInterval: 30000,
+        distanceInterval: 10,
         foregroundService: { notificationTitle: "Workla Provider Online", notificationBody: "Your location is being shared with customers", notificationColor: PRIMARY },
       });
 
       // 🔄 Foreground watch: fast updates while screen is on
+      const lastUpdateRef = { time: 0, lat: latitude, lng: longitude };
+      
       locationSubRef.current = await Location.watchPositionAsync(
         { accuracy: Location.Accuracy.High, distanceInterval: 10 },
         (locUpdate) => {
-          setCurrentLocation({ latitude: locUpdate.coords.latitude, longitude: locUpdate.coords.longitude });
-          api.post('/api/v1/providers/location', { latitude: locUpdate.coords.latitude, longitude: locUpdate.coords.longitude });
+          const lat = locUpdate.coords.latitude;
+          const lng = locUpdate.coords.longitude;
+          const now = Date.now();
           
-          localCache.get<any>('provider:location').then(cached => {
-            localCache.set('provider:location', {
-              ...cached,
-              latitude: locUpdate.coords.latitude,
-              longitude: locUpdate.coords.longitude
-            }, 86400);
-          });
+          // 🛡️ Throttle: 10 meters OR 10 seconds
+          const dist = Math.sqrt(Math.pow(lat - lastUpdateRef.lat, 2) + Math.pow(lng - lastUpdateRef.lng, 2));
+          if (dist < 0.0001 && (now - lastUpdateRef.time) < 10000) return;
+          
+          lastUpdateRef.time = now;
+          lastUpdateRef.lat = lat;
+          lastUpdateRef.lng = lng;
+
+          setCurrentLocation({ latitude: lat, longitude: lng });
+          api.post('/api/v1/providers/location', { latitude: lat, longitude: lng });
         }
       );
-    } catch { }
+    } catch (e) {
+      console.error('Failed to start location tracking:', e);
+    }
   };
 
   useEffect(() => {
@@ -437,28 +449,30 @@ export default function ProviderHomeScreen() {
 
   const subscribeToOffers = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) return () => {};
+
+    const channels: any[] = [];
 
     // 1. Listen for Job Offers via Supabase Realtime
-    supabase.channel('provider-offers').on('postgres_changes', {
+    const offerChannel = supabase.channel(`provider-offers-${user.id}`).on('postgres_changes', {
       event: 'INSERT', schema: 'public', table: 'job_offers', filter: `provider_id=eq.${user.id}`,
     }, (payload) => {
       const offer = payload.new as any;
       if (offer.status === 'pending') showIncomingJob(offer);
     }).subscribe();
+    channels.push(offerChannel);
 
     // 2. High-speed WebSocket backup for instant popups
-    try {
-      const socket = await socketService.getSocket();
-      socket.on('job:new_offer', (data) => {
+    let socket: any = null;
+    socketService.getSocket().then(s => {
+      socket = s;
+      socket.on('job:new_offer', (data: any) => {
         if (data.offer) showIncomingJob(data.offer);
       });
-    } catch (err) {
-      console.warn('Socket connection failed, relying on Realtime backup');
-    }
+    }).catch(err => console.warn('Socket connection failed, relying on Realtime backup'));
 
-    // 3. Listen for Verification Status Changes (Celebration!)
-    supabase.channel('verification-status').on('postgres_changes', {
+    // 3. Listen for Verification Status Changes
+    const verifyChannel = supabase.channel(`verification-status-${user.id}`).on('postgres_changes', {
         event: 'UPDATE', 
         schema: 'public', 
         table: 'provider_details', 
@@ -469,28 +483,36 @@ export default function ProviderHomeScreen() {
 
         if (oldStatus !== 'verified' && newStatus === 'verified') {
             setShowSuccessModal(true);
-            // Instant cache update so toggle is unlocked immediately
             localCache.get<any>('provider:stats').then(cached => {
                 if (cached) {
                     localCache.set('provider:stats', { ...cached, verificationStatus: 'verified' }, 300);
                 }
             });
-            loadStats(); // Full refresh
-
-            // Trigger Local Notification (for background awareness)
+            loadStats();
             safeScheduleNotification({
                 content: {
                     title: "Status Approved! 🎉",
                     body: "Your Workla profile is verified. You can now go online to take jobs!",
                     sound: true,
                 },
-                trigger: null, // Instant
+                trigger: null,
             });
         }
     }).subscribe();
+    channels.push(verifyChannel);
+
+    return () => {
+      channels.forEach(ch => supabase.removeChannel(ch));
+      if (socket) socket.off('job:new_offer');
+    };
   }, [showIncomingJob, loadStats]);
 
-  useEffect(() => { loadStats(); subscribeToOffers(); }, [loadStats, subscribeToOffers]);
+  useEffect(() => { 
+    loadStats(); 
+    let cleanup: any = null;
+    subscribeToOffers().then(c => cleanup = c); 
+    return () => { if (cleanup) cleanup(); };
+  }, [loadStats, subscribeToOffers]);
 
   // Silent refresh when tab is re-focused (e.g. after accepting a job)
   useFocusEffect(
