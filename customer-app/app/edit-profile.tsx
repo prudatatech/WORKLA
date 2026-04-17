@@ -62,8 +62,9 @@ export default function EditProfileScreen() {
         try {
             const payload: any = {
                 full_name: fullName.trim(),
-                bio: city.trim(),
-                address: city.trim(),
+                city: city.trim(),
+                bio: null,    // Cleared if not explicitly used
+                address: null, // Cleared if not explicitly used
                 place_of_supply: placeOfSupply.trim(),
             };
 

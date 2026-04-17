@@ -2,6 +2,8 @@
 -- Purpose: Support business invoicing for all users (Customers & Providers)
 
 ALTER TABLE public.profiles
+ADD COLUMN IF NOT EXISTS bio TEXT,
+ADD COLUMN IF NOT EXISTS address TEXT,
 ADD COLUMN IF NOT EXISTS business_name VARCHAR(255),
 ADD COLUMN IF NOT EXISTS gstin VARCHAR(15),
 ADD COLUMN IF NOT EXISTS place_of_supply VARCHAR(100);

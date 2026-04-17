@@ -63,6 +63,8 @@ export default async function userRoutes(fastifyInstance: FastifyInstance) {
                 phone: { type: 'string', pattern: '^[0-9+ ]+$' },
                 avatar_url: { type: 'string', format: 'uri' },
                 bio: { type: 'string', maxLength: 500 },
+                city: { type: 'string', maxLength: 100 },
+                pincode: { type: 'string', maxLength: 20 },
                 address: { type: 'string', maxLength: 1000 },
                 business_name: { anyOf: [{ type: 'string', maxLength: 255 }, { type: 'null' }] },
                 gstin: { anyOf: [{ type: 'string', pattern: '^[0-9A-Z]{15}$' }, { type: 'null' }] },
