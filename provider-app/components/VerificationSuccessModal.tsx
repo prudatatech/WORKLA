@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Modal, View, Text, StyleSheet, Animated, TouchableOpacity, Dimensions } from 'react-native';
+import { Modal, View, Text, StyleSheet, Animated, TouchableOpacity } from 'react-native';
 import { CheckCircle2, Zap } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 

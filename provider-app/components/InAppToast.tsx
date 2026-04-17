@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Animated, Text, View, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 
 interface ToastProps {
@@ -28,7 +28,7 @@ export default function InAppToast({ visible, title, body, type = 'info', durati
         onDismissRef.current = onDismiss;
     }, [onDismiss]);
 
-    const hideToast = (notifyParent = true) => {
+    const hideToast = useCallback((notifyParent = true) => {
         Animated.parallel([
             Animated.timing(translateY, { toValue: -120, duration: 250, useNativeDriver: true }),
             Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }),
@@ -37,7 +37,7 @@ export default function InAppToast({ visible, title, body, type = 'info', durati
                 onDismissRef.current();
             }
         });
-    };
+    }, [opacity, translateY]);
 
     useEffect(() => {
         if (visible) {
