@@ -26,7 +26,11 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
-        "NOTIFICATIONS"
+        "FOREGROUND_SERVICE_LOCATION",
+        "NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "USE_FULL_SCREEN_INTENT"
       ],
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -42,6 +46,18 @@
     },
     "plugins": [
       "expo-router",
+      "expo-av",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#1A3FFF",
+          "sounds": [
+            "./assets/sounds/job_alert.mp3"
+          ],
+          "androidMode": "default"
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -53,7 +69,8 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,

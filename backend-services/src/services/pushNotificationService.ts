@@ -59,6 +59,60 @@ export class PushNotificationService {
     }
 
     /**
+     * 🔔 Send high-priority job alert (used for incoming job requests).
+     * Uses the 'job-alerts' Android channel which bypasses DnD and plays the custom ringtone.
+     * This is required for "killed app" wake-up behavior.
+     */
+    static async sendJobAlert(
+        expoPushToken: string,
+        title: string,
+        body: string,
+        data: Record<string, any> = {}
+    ) {
+        if (!expoPushToken || !expoPushToken.startsWith('ExponentPushToken')) {
+            console.warn(`[PushService ⚠️] Invalid or missing Expo Push Token: ${expoPushToken}`);
+            return false;
+        }
+
+        const message = {
+            to: expoPushToken,
+            sound: 'job_alert.mp3', // Bundled custom ringtone
+            title,
+            body,
+            data,
+            priority: 'high',
+            channelId: 'job-alerts', // High-priority Android channel (bypassDnd = true)
+            ttl: 60,                  // Only deliver within 60 seconds (stale = useless)
+            expiration: Math.floor(Date.now() / 1000) + 60,
+            badge: 1,
+        };
+
+        try {
+            const response = await fetch(this.EXPO_PUSH_URL, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Accept-encoding': 'gzip, deflate',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(message),
+            });
+
+            const result = await response.json();
+            if (!response.ok) {
+                console.error(`[PushService ❌] Job Alert API error:`, result);
+                return false;
+            }
+
+            console.warn(`[PushService 🔔] Job alert sent to ${expoPushToken.substring(0, 20)}...`);
+            return true;
+        } catch (error: any) {
+            console.error(`[PushService ❌] Failed to send job alert:`, error.message);
+            return false;
+        }
+    }
+
+    /**
      * Sends the same notification to multiple tokens (batching).
      */
     static async sendBatchNotifications(

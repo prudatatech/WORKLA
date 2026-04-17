@@ -84,6 +84,9 @@ export default function TrackingScreen() {
     // Rescheduling Modal State
     const [rescheduleModalVisible, setRescheduleModalVisible] = useState(false);
 
+    // Success State for "Redirect" feel
+    const [showAcceptedSuccess, setShowAcceptedSuccess] = useState(false);
+
     // const CANCEL_REASONS = [...]; // Moved to component/CancelModal.tsx or unused here
 
     // Pulse animation for the worker marker
@@ -233,13 +236,22 @@ export default function TrackingScreen() {
                     }));
 
                     // 2. If transitioning to a provider-assigned state, refresh full details
-                    // Use forceRefresh=true to bypass the 300s Redis cache and get fresh data
                     if (['confirmed', 'en_route', 'arrived', 'in_progress', 'completed'].includes(payload.new.status)) {
+                        // 🚀 Trigger success feedback immediately
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        
+                        // Show success overlay for "Redirect" feel
+                        if (payload.new.status === 'confirmed') {
+                            setShowAcceptedSuccess(true);
+                            setTimeout(() => setShowAcceptedSuccess(false), 2000);
+                        }
+
+                        // Use forceRefresh=true to bypass the 300s Redis cache and get fresh data
                         // Small timeout to let the DB settle (joins can lag a few ms after write)
-                        setTimeout(() => loadBooking(false, true), 500);
+                        setTimeout(() => loadBooking(false, true), 400);
                     }
 
-                    // Special case: if completed, maybe show a toast or navigation
+                    // Special case: if completed, trigger additional feedback
                     if (payload.new.status === 'completed') {
                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                     }
@@ -346,8 +358,9 @@ export default function TrackingScreen() {
         }
     };
 
-    const handleCancelJob = async () => {
-        if (!selectedReason) {
+    const handleCancelJob = async (customReason?: string) => {
+        const finalReason = customReason || selectedReason;
+        if (!finalReason) {
             Alert.alert('Selection Required', 'Please select a reason for cancellation.');
             return;
         }
@@ -356,7 +369,7 @@ export default function TrackingScreen() {
         try {
             const res = await api.patch(`/api/v1/bookings/${id}/status`, {
                 status: 'cancelled',
-                cancellationReason: selectedReason
+                cancellationReason: finalReason
             });
 
             if (res.error) throw new Error(res.error);
@@ -515,15 +528,30 @@ export default function TrackingScreen() {
                         </TouchableOpacity>
                     </SafeAreaView>
 
-                    <View style={styles.searchingFooter}>
-                        <Text style={styles.searchingNote}>
-                            Stay on this page. We&apos;re dispatching pros to your location.
-                        </Text>
-                        <TouchableOpacity style={styles.closeSearching} onPress={() => setCancelModalVisible(true)}>
-                            <Text style={styles.closeSearchingText}>Cancel Request</Text>
-                        </TouchableOpacity>
+                        <View style={styles.searchingFooter}>
+                            <Text style={styles.searchingNote}>
+                                Stay on this page. We&apos;re connecting with service partners near your location.
+                            </Text>
+                            <TouchableOpacity 
+                                style={styles.closeSearching} 
+                                onPress={() => {
+                                    // 🚀 Instant cancel for searching phase (no reason selection needed)
+                                    handleCancelJob('Cancelled by user during search');
+                                }}
+                            >
+                                <Text style={styles.closeSearchingText}>Stop Searching</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
-                </View>
+                ) : showAcceptedSuccess ? (
+                    <View style={styles.successOverlay}>
+                        <StatusBar barStyle="light-content" backgroundColor={PRIMARY} />
+                        <Animated.View style={styles.successIconBoxLarge}>
+                            <Check size={40} color="#FFF" />
+                        </Animated.View>
+                        <Text style={styles.successTitle}>Partner Found!</Text>
+                        <Text style={styles.successSub}>A service partner has accepted your request. Redirecting...</Text>
+                    </View>
             ) : booking.status === 'cancelled' && booking.cancellation_reason?.includes('No worker found') ? (
                 <View style={styles.noWorkerContainer}>
                     <EmptyState 
@@ -1091,4 +1119,37 @@ const styles = StyleSheet.create({
     proofImage: { width: '100%', height: '100%' },
     proofLabelBox: { position: 'absolute', bottom: 8, left: 8, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: 'rgba(26, 63, 255, 0.8)' },
     proofLabel: { fontSize: 8, fontWeight: '900', color: '#FFF' },
+    // Success Overlay for Transition
+    successOverlay: {
+        flex: 1,
+        backgroundColor: PRIMARY,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 40,
+    },
+    successIconBoxLarge: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 32,
+        borderWidth: 2,
+        borderColor: 'rgba(255, 255, 255, 0.5)',
+    },
+    successTitle: {
+        fontSize: 32,
+        fontWeight: '900',
+        color: '#FFF',
+        marginBottom: 16,
+        textAlign: 'center',
+    },
+    successSub: {
+        fontSize: 18,
+        color: 'rgba(255, 255, 255, 0.8)',
+        textAlign: 'center',
+        lineHeight: 26,
+        fontWeight: '600',
+    },
 });

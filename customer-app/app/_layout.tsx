@@ -1,14 +1,25 @@
 import * as SplashScreen from 'expo-splash-screen';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, Platform } from 'react-native';
 import { Buffer } from 'buffer';
 import NetworkBanner from '../components/NetworkBanner';
 import InAppToast from '../components/InAppToast';
 import LoadingScreen from '../components/LoadingScreen';
 import { supabase } from '../lib/supabase';
 import { socketService } from '../lib/socket';
+import { api } from '../lib/api';
+
+// 🛡️ Safe notification loader — never loads in Expo Go on Android (SDK 53+)
+const IS_EXPO_GO_ANDROID =
+  Constants.executionEnvironment === ExecutionEnvironment.StoreClient && Platform.OS === 'android';
+
+const getNotifications = () => {
+  if (IS_EXPO_GO_ANDROID) return null;
+  try { return require('expo-notifications'); } catch { return null; }
+};
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -31,10 +42,75 @@ export default function RootLayout() {
   });
   const router = useRouter();
   const segments = useSegments();
+  const notifResponseRef = useRef<any>(null);
   
   // 🛡️ Track app state and realtime channel reference
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const channelRef = useRef<any>(null);
+
+  // 🔔 Setup push notifications on mount
+  useEffect(() => {
+    const Notifs = getNotifications();
+    if (!Notifs) return; // Expo Go on Android — skip silently
+
+    (async () => {
+      // 1. Set notification handler
+      Notifs.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: true,
+        }),
+      });
+
+      // 2. Setup Android notification channel
+      if (Platform.OS === 'android') {
+        await Notifs.setNotificationChannelAsync('booking-updates', {
+          name: 'Booking Updates',
+          importance: Notifs.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#1A3FFF',
+          lockscreenVisibility: Notifs.AndroidNotificationVisibility.PUBLIC,
+          sound: 'default',
+        });
+      }
+
+      // 3. Request permissions
+      const { status: existing } = await Notifs.getPermissionsAsync();
+      let finalStatus = existing;
+      if (existing !== 'granted') {
+        const { status } = await Notifs.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== 'granted') return;
+
+      // 4. Register push token with backend
+      try {
+        const token = (await Notifs.getExpoPushTokenAsync({
+          projectId: Constants.expoConfig?.extra?.eas?.projectId,
+        })).data;
+        if (token) {
+          await api.patch('/api/v1/users/push-token', { token });
+          console.log('[Customer] ✅ Push token registered');
+        }
+      } catch (e) {
+        console.warn('[Customer] Push token registration failed:', e);
+      }
+    })();
+
+    // 5. Tap listener: navigate to booking when notification is tapped
+    notifResponseRef.current = Notifs.addNotificationResponseReceivedListener((response: any) => {
+      const data = response?.notification?.request?.content?.data;
+      if (data?.bookingId) {
+        router.push(`/track/${data.bookingId}` as any);
+      }
+    });
+
+    return () => {
+      if (notifResponseRef.current) Notifs.removeNotificationSubscription(notifResponseRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const checkSession = async () => {

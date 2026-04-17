@@ -13,6 +13,7 @@ import FilterTabs from '../../components/common/FilterTabs';
 import EmptyState from '../../components/EmptyState';
 import { api } from '../../lib/api';
 import { supabase } from '../../lib/supabase';
+import { localCache } from '../../lib/localCache';
 
 const BookingsEmptyImg = require('../../assets/images/bookings-empty.png');
 
@@ -30,6 +31,7 @@ function MyBookingsScreen() {
   const [cancelling, setCancelling] = useState(false);
   const [isLiveUpdating, setIsLiveUpdating] = useState(false);
   const hasMountedRef = useRef(false);
+  const lastLoadTimeRef = useRef<number>(0);
 
   const router = useRouter();
 
@@ -96,7 +98,19 @@ function MyBookingsScreen() {
 
   // Stable fetch function — no dependency on refreshing state
   const fetchBookings = useCallback(async (isSilent = false) => {
-    if (!isSilent) setLoading(true);
+    const cacheKey = 'customer:bookings';
+    
+    if (!isSilent) {
+      localCache.get<any[]>(cacheKey).then(cached => {
+        if (cached?.length) {
+          setBookings(cached);
+          setLoading(false); // Render immediately from cache
+        } else {
+          setLoading(true);
+        }
+      });
+    }
+
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -104,7 +118,10 @@ function MyBookingsScreen() {
         return;
       }
       const res = await api.get('/api/v1/bookings');
-      if (res.data) setBookings(res.data);
+      if (res.data) {
+        setBookings(res.data);
+        localCache.set(cacheKey, res.data, 600); // Cache for 10 minutes
+      }
     } catch (e) {
       console.error('Fetch error:', e);
     } finally {
@@ -142,11 +159,13 @@ function MyBookingsScreen() {
     return () => { if (channel) supabase.removeChannel(channel); };
   }, [fetchBookings]);
 
-  // Silent refresh when tab is re-focused (no loading spinner)
+  // Debounced tab focus refresh (every 2 minutes max) to prevent hammering
   useFocusEffect(
     useCallback(() => {
-      if (hasMountedRef.current) {
-        fetchBookings(true); // silent
+      const now = Date.now();
+      if (hasMountedRef.current && (now - lastLoadTimeRef.current > 2 * 60 * 1000)) {
+        lastLoadTimeRef.current = now;
+        fetchBookings(true);
       }
       hasMountedRef.current = true;
     }, [fetchBookings])

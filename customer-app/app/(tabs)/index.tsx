@@ -48,6 +48,7 @@ export default function HomeScreen() {
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const realtimeChannelRef = useRef<any>(null);
   const pulseAnimRef = useRef<Animated.CompositeAnimation | null>(null);
+  const lastLoadTimeRef = useRef<number>(0); // ⏱ Debounce repeated focus-loads
 
   // ── Data State ──
   const [services, setServices] = useState<any[]>([]);
@@ -361,11 +362,15 @@ export default function HomeScreen() {
     return () => sub.remove();
   }, [loadData, startPulseAnimation, subscribeToBookingUpdates]);
 
-  // Refresh data when screen comes into focus (e.g. after adding an address)
+  // Refresh data when screen comes into focus — debounced to 2 minutes
+  // This prevents hammering the API on every tab switch
   useFocusEffect(
     useCallback(() => {
-      console.log('[Home] Screen focused — performing light refresh');
-      loadData();
+      const now = Date.now();
+      if (now - lastLoadTimeRef.current > 2 * 60 * 1000) {
+        lastLoadTimeRef.current = now;
+        loadData();
+      }
     }, [loadData])
   );
 

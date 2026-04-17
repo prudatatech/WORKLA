@@ -1,11 +1,12 @@
 import * as Haptics from 'expo-haptics';
 import * as TaskManager from 'expo-task-manager';
 import * as Location from 'expo-location';
-import { safeRequestPermissions, safeScheduleNotification, safeSetNotificationHandler, getPushTokenAsync } from '../../lib/notifications';
+import { useAudioPlayer } from 'expo-audio';
+import { safeRequestPermissions, safeScheduleNotification, safeSetNotificationHandler, getPushTokenAsync, setupNotificationChannels } from '../../lib/notifications';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { AlertTriangle, ChevronRight } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Animated, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, Vibration, View } from 'react-native';
+import { Alert, Animated, AppState, AppStateStatus, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, Vibration, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ProviderHero from '../../components/home/ProviderHero';
 import StatsRow from '../../components/home/StatsRow';
@@ -66,11 +67,27 @@ export default function ProviderHomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
+  const player = useAudioPlayer(require('../../assets/sounds/job_alert.mp3')); // expo-audio player
+  const jobCancelSubRef = useRef<any>(null);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
-  // ⚡ Instantly restore online status from persistent cache (no "Offline" flash)
+  // ⚡ Default to ALWAYS ON. Only turn off if the user explicitly clicked the toggle (cached === false).
+  // Also auto-reconnect to backend and resume background tracking on open.
   useEffect(() => {
-    localCache.get<boolean>('provider:isOnline').then(cached => {
-      if (cached === true || cached === false) setIsOnline(cached);
+    localCache.get<boolean>('provider:isOnline').then(async cached => {
+      if (cached !== false) {
+        setIsOnline(true);
+        // Auto-restore online status to backend (in case server lost it)
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await api.patch('/api/v1/providers/online', { is_online: true });
+            startLocationTracking(user.id);
+          }
+        } catch { /* silent — loadStats will retry */ }
+      } else {
+        setIsOnline(false);
+      }
     });
   }, []);
 
@@ -97,20 +114,25 @@ export default function ProviderHomeScreen() {
       if (fgStatus !== 'granted') { setCurrentCity('Permission Denied'); return; }
       await Location.requestBackgroundPermissionsAsync();
 
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      // ⚡ Get fresh location immediately
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       setCurrentLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
       await api.post('/api/v1/providers/location', { latitude: loc.coords.latitude, longitude: loc.coords.longitude });
 
       const [address] = await Location.reverseGeocodeAsync({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
       if (address) setCurrentCity(address.city || address.subregion || address.district || 'Location Set');
 
+      // 📶 High-frequency background updates (every 30s / every 10m movement)
       await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-        accuracy: Location.Accuracy.Balanced, timeInterval: 60000, distanceInterval: 50,
+        accuracy: Location.Accuracy.High,
+        timeInterval: 30000,      // Every 30 seconds
+        distanceInterval: 10,     // Every 10 meters
         foregroundService: { notificationTitle: "Workla Provider Online", notificationBody: "Your location is being shared with customers", notificationColor: PRIMARY },
       });
 
+      // 🔄 Foreground watch: fast updates while screen is on
       locationSubRef.current = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.Balanced, distanceInterval: 50 },
+        { accuracy: Location.Accuracy.High, distanceInterval: 10 },
         (locUpdate) => {
           setCurrentLocation({ latitude: locUpdate.coords.latitude, longitude: locUpdate.coords.longitude });
           api.post('/api/v1/providers/location', { latitude: locUpdate.coords.latitude, longitude: locUpdate.coords.longitude });
@@ -127,6 +149,9 @@ export default function ProviderHomeScreen() {
           console.warn('Notification permissions not granted or failed');
       }
     })();
+
+    // 🔔 Setup high-priority notification channels (job-alerts bypasses DnD)
+    setupNotificationChannels();
 
     // Configure notification behavior
     safeSetNotificationHandler({
@@ -149,6 +174,19 @@ export default function ProviderHomeScreen() {
             }
         }
     })();
+
+    // 🔄 AppState listener: auto-refresh location + stats when app comes to foreground
+    const subscription = AppState.addEventListener('change', async (nextState: AppStateStatus) => {
+        if (appStateRef.current.match(/inactive|background/) && nextState === 'active') {
+            console.warn('[App] Foregrounded — syncing location & stats');
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) startLocationTracking(user.id);
+            loadStats();
+        }
+        appStateRef.current = nextState;
+    });
+
+    return () => subscription.remove();
   }, []);
 
   const loadStats = useCallback(async (force = false) => {
@@ -249,16 +287,39 @@ export default function ProviderHomeScreen() {
     }
   }, []);
 
+  // 🔔 Sound helper: play looping ringtone (expo-audio)
+  const playJobAlertSound = useCallback(async () => {
+    try {
+      player.loop = true;
+      player.volume = 1.0;
+      player.play();
+    } catch (e) {
+      console.warn('[Sound] Failed to play job alert sound:', e);
+    }
+  }, [player]);
+
+  const stopJobAlertSound = useCallback(async () => {
+    try {
+      player.pause();
+      player.seekTo(0);
+    } catch { }
+  }, [player]);
+
   const handleReject = useCallback(async (offerId: string) => {
+    stopJobAlertSound();
     if (countdownRef.current) clearInterval(countdownRef.current);
+    // Remove booking cancellation listener
+    if (jobCancelSubRef.current) { supabase.removeChannel(jobCancelSubRef.current); jobCancelSubRef.current = null; }
     Animated.timing(slideAnim, { toValue: 500, duration: 300, useNativeDriver: true }).start(() => setIncomingJob(null));
     await supabase.from('job_offers').update({ status: 'rejected' }).eq('id', offerId);
-  }, [slideAnim]);
+  }, [slideAnim, stopJobAlertSound]);
 
   const handleAccept = useCallback(async (offerId: string) => {
     // 🚀 Optimistic UI: Dismiss modal INSTANTLY with success feedback
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    stopJobAlertSound();
     if (countdownRef.current) clearInterval(countdownRef.current);
+    if (jobCancelSubRef.current) { supabase.removeChannel(jobCancelSubRef.current); jobCancelSubRef.current = null; }
     Animated.timing(slideAnim, { toValue: 500, duration: 300, useNativeDriver: true }).start(() => setIncomingJob(null));
     
     // API call runs in background while user already sees success
@@ -279,7 +340,7 @@ export default function ProviderHomeScreen() {
         const msg = e.response?.data?.error || e.response?.data?.message || e.message;
         Alert.alert('Error', msg || 'Failed to accept job'); 
     }
-  }, [slideAnim, loadStats]);
+  }, [slideAnim, loadStats, stopJobAlertSound]);
 
   const showIncomingJob = useCallback(async (offer: any) => {
     let bookingData: any = null;
@@ -310,12 +371,43 @@ export default function ProviderHomeScreen() {
     setCountdown(30);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     Vibration.vibrate([0, 500, 200, 500]);
+    playJobAlertSound(); // 🔔 Start ringing
     Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, bounciness: 8 }).start();
     if (countdownRef.current) clearInterval(countdownRef.current);
     countdownRef.current = setInterval(() => {
-      setCountdown(prev => { if (prev <= 1) { clearInterval(countdownRef.current!); handleReject(offer.id); return 0; } return prev - 1; });
+      setCountdown(prev => { 
+        if (prev <= 1) { 
+          clearInterval(countdownRef.current!); 
+          stopJobAlertSound(); // Stop ringing on timeout
+          handleReject(offer.id); 
+          return 0; 
+        } 
+        return prev - 1; 
+      });
     }, 1000);
-  }, [slideAnim, handleReject]);
+
+    // 📶 Listen for customer cancellation: if booking is cancelled, dismiss modal
+    if (jobCancelSubRef.current) supabase.removeChannel(jobCancelSubRef.current);
+    const channel = supabase.channel(`booking-cancel-${offer.booking_id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'bookings',
+        filter: `id=eq.${offer.booking_id}`,
+      }, (payload) => {
+        const newStatus = (payload.new as any).status;
+        if (newStatus === 'cancelled') {
+          // Customer cancelled — dismiss modal silently
+          stopJobAlertSound();
+          if (countdownRef.current) clearInterval(countdownRef.current);
+          Animated.timing(slideAnim, { toValue: 500, duration: 300, useNativeDriver: true }).start(() => setIncomingJob(null));
+          supabase.removeChannel(channel);
+          jobCancelSubRef.current = null;
+        }
+      })
+      .subscribe();
+    jobCancelSubRef.current = channel;
+  }, [slideAnim, handleReject, playJobAlertSound, stopJobAlertSound]);
 
   const subscribeToOffers = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -467,6 +559,20 @@ export default function ProviderHomeScreen() {
         isOnline={isOnline} toggling={toggling} providerName={providerName}
         pulseAnim={pulseAnim} onToggle={toggleOnline} onBellPress={() => router.push('/explore' as any)}
       />
+
+      {/* 🧪 DEV ONLY: Test incoming job alert sound */}
+      {__DEV__ && (
+        <TouchableOpacity
+          style={{ backgroundColor: '#7C3AED', marginHorizontal: 20, marginTop: 8, padding: 12, borderRadius: 12, alignItems: 'center' }}
+          onPress={() => showIncomingJob({
+            id: 'test-offer-' + Date.now(),
+            booking_id: 'test-booking-' + Date.now(),
+            distance_km: 2.3,
+          })}
+        >
+          <Text style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>🔔 Test Job Alert (DEV)</Text>
+        </TouchableOpacity>
+      )}
 
       <ScrollView 
         contentContainerStyle={styles.scroll} 

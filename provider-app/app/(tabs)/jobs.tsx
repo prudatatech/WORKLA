@@ -14,7 +14,7 @@ import { JobCardSkeleton } from '../../components/SkeletonLoader';
 import EmptyState from '../../components/EmptyState';
 import { api } from '../../lib/api';
 import { supabase } from '../../lib/supabase';
-
+import { localCache } from '../../lib/localCache';
 import { enqueueAction } from '../../lib/syncQueue';
 
 const JobsEmptyImg = require('../../assets/images/bookings-empty.png');
@@ -34,18 +34,37 @@ export default function MyJobsScreen() {
   const actionInProgressRef = useRef(false); // prevents double-press
 
   const fetchJobs = useCallback(async (isSilent = false, bustCache = false) => {
-    if (!isSilent) setLoading(true);
+    let statusFilter: string;
+    if (activeTab === 'Active') statusFilter = 'confirmed,en_route,arrived,in_progress';
+    else if (activeTab === 'Completed') statusFilter = 'completed';
+    else statusFilter = 'cancelled';
+    
+    // ⚡ Optimistic Cache Check: Instantly load cached jobs for this tab to remove UI flicker
+    const cacheKey = `provider:jobs:${activeTab}`;
+    if (!isSilent && !bustCache) {
+      localCache.get<any[]>(cacheKey).then(cached => {
+        if (cached?.length) {
+          setJobs(cached);
+          setLoading(false); // UI renders immediately
+        } else {
+          setLoading(true);
+        }
+      });
+    }
+
     try {
-      let statusFilter: string;
-      if (activeTab === 'Active') statusFilter = 'confirmed,en_route,arrived,in_progress';
-      else if (activeTab === 'Completed') statusFilter = 'completed';
-      else statusFilter = 'cancelled';
       // bustCache=true adds ?refresh=true to bypass the backend Redis cache after status changes
       const suffix = bustCache ? '&refresh=true' : '';
       const res = await api.get(`/api/v1/bookings?role=provider&status=${statusFilter}${suffix}`);
-      if (res.data) setJobs(res.data);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+      if (res.data) {
+        setJobs(res.data);
+        localCache.set(cacheKey, res.data, 600); // 10 min local cache
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   }, [activeTab]);
 
   const [isBusy, setIsBusy] = useState(false);

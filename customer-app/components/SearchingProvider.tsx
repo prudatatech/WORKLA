@@ -59,18 +59,18 @@ export default function SearchingProvider({ serviceName }: { serviceName: string
             </View>
 
             <View style={styles.textContainer}>
-                <Text style={styles.title}>Searching for experts...</Text>
+                <Text style={styles.title}>Searching for service partners...</Text>
                 <Text style={styles.subtitle}>
-                    Sit back and relax. We&apos;re matching your <Text style={styles.bold}>{serviceName}</Text> request with the highest-rated providers nearby.
+                    Sit back and relax. We&apos;re matching your <Text style={styles.bold}>{serviceName}</Text> request with the highest-rated service partners nearby.
                 </Text>
             </View>
 
             <View style={styles.tipContainer}>
                 <View style={styles.tipBadge}>
                     <Zap size={12} color="#FFF" fill="#FFF" />
-                    <Text style={styles.tipBadgeText}>PRO TIP</Text>
+                    <Text style={styles.tipBadgeText}>QUICK CONNECT</Text>
                 </View>
-                <Text style={styles.tipText}>The first available expert to accept will be assigned immediately to ensure the fastest ETA.</Text>
+                <Text style={styles.tipText}>The first available service partner to accept will be assigned immediately to ensure the fastest ETA.</Text>
             </View>
         </View>
     );

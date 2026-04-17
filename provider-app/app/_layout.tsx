@@ -3,7 +3,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as TaskManager from 'expo-task-manager';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Alert } from 'react-native';
 import { Buffer } from 'buffer';
 
@@ -19,6 +19,13 @@ import InAppToast from '../components/InAppToast';
 import IncomingJobModal from '../components/jobs/IncomingJobModal';
 import LoadingScreen from '../components/LoadingScreen';
 import { api } from '../lib/api';
+import { IS_NOTIFICATIONS_SAFE } from '../lib/notifications';
+
+// Safe Notifications helper — avoids the Expo Go SDK 53 crash
+const getNotifications = () => {
+    if (!IS_NOTIFICATIONS_SAFE) return null;
+    try { return require('expo-notifications'); } catch { return null; }
+};
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -81,6 +88,7 @@ export default function RootLayout() {
   const segments = useSegments();
   const router = useRouter();
   const [incomingJob, setIncomingJob] = useState<any>(null);
+  const notifResponseListener = useRef<any>(null);
   const [toast, setToast] = useState<{ visible: boolean; title: string; body: string; type: 'info' | 'success' | 'warning' | 'error' }>({
     visible: false, title: '', body: '', type: 'info'
   });
@@ -101,7 +109,24 @@ export default function RootLayout() {
       setSession(session);
     });
 
-    return () => subscription.unsubscribe();
+    // 🔔 Push notification tap listener (works from killed/background state)
+    // When provider taps the incoming job notification, open the job modal
+    const Notifs = getNotifications();
+    if (Notifs) {
+      notifResponseListener.current = Notifs.addNotificationResponseReceivedListener((response: any) => {
+        const data = response.notification.request.content.data as any;
+        if (data?.type === 'new_job' || data?.type === 'job_nudge') {
+          setIncomingJob(data);
+        }
+      });
+    }
+
+    return () => {
+      subscription.unsubscribe();
+      if (notifResponseListener.current && getNotifications()) {
+        getNotifications()?.removeNotificationSubscription(notifResponseListener.current);
+      }
+    };
   }, []);
 
   // 2. Navigation & Onboarding Control

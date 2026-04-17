@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "customer-app",
+    "name": "Workla",
     "owner": "saasuno.info",
     "slug": "customer-app",
     "version": "1.0.0",
@@ -10,7 +10,12 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.workla.customer",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Workla needs your location to find nearby service providers.",
+        "NSLocationAlwaysUsageDescription": "Workla uses your location to match you with nearby providers."
+      }
     },
     "android": {
       "package": "com.workla.customer",
@@ -26,10 +31,8 @@
         "ACCESS_FINE_LOCATION",
         "FOREGROUND_SERVICE",
         "NOTIFICATIONS",
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "FOREGROUND_SERVICE",
-        "NOTIFICATIONS"
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED"
       ],
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -45,6 +48,14 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#1A3FFF",
+          "androidMode": "default"
+        }
+      ],
       [
         "expo-splash-screen",
         {

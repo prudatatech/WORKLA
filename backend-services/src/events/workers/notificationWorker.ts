@@ -53,8 +53,7 @@ export async function startNotificationWorker() {
         });
 
         // 3. 🚀 Push Notification Delivery (for "Always On")
-        // We always try to send a push for critical events (jobs, payouts, verified)
-        // because the user might have the app in background or killed.
+        // Job alerts use high-priority channel with ringtone. All others use default.
         try {
             const { data: profile } = await supabaseAdmin
                 .from('profiles')
@@ -63,12 +62,22 @@ export async function startNotificationWorker() {
                 .single();
             
             if (profile?.expo_push_token) {
-                await PushNotificationService.sendNotification(
-                    profile.expo_push_token,
-                    title,
-                    body,
-                    { ...payload, type }
-                );
+                if (type === 'new_job' || type === 'job_nudge') {
+                    // 🔔 High-priority: wakes device even when app is killed
+                    await PushNotificationService.sendJobAlert(
+                        profile.expo_push_token,
+                        title,
+                        body,
+                        { ...payload, type }
+                    );
+                } else {
+                    await PushNotificationService.sendNotification(
+                        profile.expo_push_token,
+                        title,
+                        body,
+                        { ...payload, type }
+                    );
+                }
             }
         } catch (pushErr: any) {
             console.error(`[Worker ⚠️] Push delivery skipped for ${userId}:`, pushErr.message);

@@ -1,7 +1,17 @@
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform } from 'react-native';
 
+const IS_EXPO_GO_ANDROID = () => {
+    try {
+        const { ExecutionEnvironment } = require('expo-constants');
+        const { Platform } = require('react-native');
+        return Constants.executionEnvironment === ExecutionEnvironment.StoreClient && Platform.OS === 'android';
+    } catch { return false; }
+};
+
 const getNotifications = () => {
+    // 🛡️ Never load expo-notifications in Expo Go on Android — it throws
+    if (IS_EXPO_GO_ANDROID()) return null;
     try {
         return require('expo-notifications');
     } catch {
@@ -22,6 +32,44 @@ const isAndroid = Platform.OS === 'android';
 
 // 🛡️ Determine if it's safe to use Notification features that might trigger push-related checks
 export const IS_NOTIFICATIONS_SAFE = !(isExpoGo && isAndroid);
+
+/**
+ * 🔔 Setup Android Notification Channels
+ * Must be called once on app launch. Creates the high-priority
+ * 'job-alerts' channel used for incoming job ringtone alerts.
+ */
+export const setupNotificationChannels = async () => {
+    if (Platform.OS !== 'android') return;
+    const Notifications = getNotifications();
+    if (!Notifications) return;
+
+    try {
+        // HIGH PRIORITY channel for incoming job alerts — bypasses DnD
+        await Notifications.setNotificationChannelAsync('job-alerts', {
+            name: 'Incoming Job Alerts',
+            importance: Notifications.AndroidImportance.MAX,
+            sound: 'job_alert.mp3',
+            vibrationPattern: [0, 500, 300, 500, 300, 500],
+            lightColor: '#1A3FFF',
+            lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+            bypassDnd: true,
+            showBadge: true,
+            enableLights: true,
+            enableVibrate: true,
+        });
+
+        // Lower priority channel for informational alerts
+        await Notifications.setNotificationChannelAsync('default', {
+            name: 'General Notifications',
+            importance: Notifications.AndroidImportance.DEFAULT,
+            sound: 'default',
+        });
+
+        console.warn('[Notifications] ✅ Notification channels configured');
+    } catch (e) {
+        console.error('[Notifications] Failed to set up channels:', e);
+    }
+};
 
 export const safeRequestPermissions = async () => {
     if (!IS_NOTIFICATIONS_SAFE) {
