@@ -31,7 +31,7 @@ export function setupChatHandlers(io: Server, socket: Socket, logger: FastifyIns
     });
 
     // Send a message
-    socket.on('chat:sendMessage', async (payload: { bookingId: string, content: string }) => {
+    socket.on('chat:sendMessage', async (payload: { bookingId: string, content: string, tempId?: string }) => {
         const user = (socket as any).user;
         if (!user || (!payload.bookingId && !payload.content)) return;
 
@@ -44,6 +44,7 @@ export function setupChatHandlers(io: Server, socket: Socket, logger: FastifyIns
             booking_id: payload.bookingId,
             sender_id: senderId,
             content: payload.content,
+            tempId: payload.tempId, // Echo back for sender deduplication
             created_at: new Date().toISOString(),
         };
 

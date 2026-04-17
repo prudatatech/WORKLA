@@ -28,6 +28,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { socketService } from '../../lib/socket';
 import { supabase } from '../../lib/supabase';
+import { initiateCall } from '../../lib/phone';
 import EmptyState from '../../components/EmptyState';
 
 const PRIMARY = '#1A3FFF';
@@ -85,8 +86,15 @@ export default function ChatScreen() {
             const handleNewMessage = (msg: any) => {
                 if (msg.booking_id === bookingId) {
                     setMessages(current => {
-                        // Avoid duplicates (optimistic message already added)
+                        // ⚡ Robust Deduplication:
+                        // 1. If we find a message with the same tempId, REPLACE it (confirming optimistic UI)
+                        if (msg.tempId && current.find(m => m.id === msg.tempId)) {
+                            return current.map(m => m.id === msg.tempId ? msg : m);
+                        }
+                        // 2. If we find a message with the same server ID, skip (prevents duplicates)
                         if (current.find(m => m.id === msg.id)) return current;
+                        
+                        // 3. Otherwise add new message
                         return [...current, msg];
                     });
                     scrollToEnd();
@@ -172,7 +180,8 @@ export default function ChatScreen() {
                 const socket = await socketService.getSocket();
                 socket.emit('chat:sendMessage', {
                     bookingId,
-                    content: trimmed
+                    content: trimmed,
+                    tempId // Pass correlation ID to backend
                 });
             } catch (_err) {
                 setMessages(curr => curr.filter(m => m.id !== tempId));
@@ -244,7 +253,10 @@ export default function ChatScreen() {
                 </View>
 
                 <View style={styles.headerActions}>
-                    <TouchableOpacity style={styles.headerActionBtn}>
+                    <TouchableOpacity 
+                        style={styles.headerActionBtn}
+                        onPress={() => initiateCall(booking?.provider_details?.phone || booking?.provider_details?.profiles?.phone)}
+                    >
                         <Phone size={16} color="#374151" />
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.headerActionBtn}>

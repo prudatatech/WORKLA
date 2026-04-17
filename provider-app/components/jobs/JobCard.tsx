@@ -4,7 +4,8 @@ import {
   Navigation2, Phone, Play, Wrench, XCircle
 } from 'lucide-react-native';
 import React from 'react';
-import { ActivityIndicator, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { formatIndianPhone, initiateCall } from '../../lib/phone';
 
 const PRIMARY = '#1A3FFF';
 
@@ -53,11 +54,11 @@ export default function JobCard({ item, actionLoading, confirmJobId, onAdvance, 
           </View>
           <View>
             <Text style={styles.customerName}>{customer?.full_name || 'Customer'}</Text>
-            <Text style={styles.customerPhone}>{customer?.phone || 'No phone'}</Text>
+            <Text style={styles.customerPhone}>{formatIndianPhone(customer?.phone) || 'No phone'}</Text>
           </View>
         </View>
         <View style={styles.contactActions}>
-          <TouchableOpacity style={styles.contactBtn} onPress={() => Linking.openURL(`tel:${customer?.phone}`)}>
+          <TouchableOpacity style={styles.contactBtn} onPress={() => initiateCall(customer?.phone)}>
             <Phone size={16} color={PRIMARY} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.contactBtn} onPress={() => router.push({ pathname: '/chat/[id]', params: { id: item.id } } as any)}>

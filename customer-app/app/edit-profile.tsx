@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../lib/api';
+import { formatIndianPhone } from '../lib/phone';
 import { supabase } from '../lib/supabase';
 
 const PRIMARY = '#1A3FFF';
@@ -143,7 +144,7 @@ export default function EditProfileScreen() {
                             <View style={[s.inputRow, s.inputRowDisabled]}>
                                 <Phone size={16} color="#D1D5DB" />
                                 <TextInput
-                                    style={[s.input, { color: '#9CA3AF' }]} value={phone}
+                                    style={[s.input, { color: '#9CA3AF' }]} value={formatIndianPhone(phone)}
                                     editable={false} placeholder="Phone"
                                     placeholderTextColor="#9CA3AF"
                                 />

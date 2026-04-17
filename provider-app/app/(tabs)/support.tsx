@@ -13,6 +13,7 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { initiateCall } from '../../lib/phone';
 
 const PRIMARY = '#1A3FFF';
 
@@ -45,8 +46,7 @@ export default function ProviderSupportScreen() {
 
     const handleCall = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        const url = Platform.OS === 'android' ? 'tel:18001234567' : 'telprompt:18001234567';
-        Linking.openURL(url).catch(err => console.error('Error opening dialer', err));
+        initiateCall('18001234567');
     };
 
     const handleEmail = () => {

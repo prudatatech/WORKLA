@@ -35,6 +35,7 @@ import NearbyWorkers from '../../components/bookings/NearbyWorkers';
 import CancelModal from '../../components/bookings/CancelModal';
 import SearchingProvider from '../../components/SearchingProvider';
 import { api } from '../../lib/api';
+import { initiateCall } from '../../lib/phone';
 import { socketService } from '../../lib/socket';
 import { supabase } from '../../lib/supabase';
 import EmptyState from '../../components/EmptyState';
@@ -814,7 +815,11 @@ export default function TrackingScreen() {
                                             if (action.key === 'chat') {
                                                 router.push({ pathname: '/chat/[id]', params: { id: String(id) } } as any);
                                             } else if (action.key === 'call') {
-                                                Alert.alert('Calling', `Calling ${providerName}...`);
+                                                if (booking.profiles?.phone) {
+                                                    initiateCall(booking.profiles.phone);
+                                                } else {
+                                                    Alert.alert('Error', 'Provider phone number not available.');
+                                                }
                                             } else {
                                                 handleShare();
                                             }

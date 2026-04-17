@@ -29,6 +29,7 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { formatIndianPhone } from '../../lib/phone';
 import { supabase } from '../../lib/supabase';
 
 const PRIMARY = '#1A3FFF';
@@ -122,7 +123,7 @@ export default function ProviderProfileScreen() {
         {
             title: 'Preferences',
             items: [
-                { label: 'Phone Number', Icon: Phone, value: profile?.phone, onPress: () => { } },
+                { label: 'Phone Number', Icon: Phone, value: formatIndianPhone(profile?.phone), onPress: () => { } },
             ],
         },
         {

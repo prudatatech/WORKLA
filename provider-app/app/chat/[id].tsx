@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeft, Send } from 'lucide-react-native';
+import { ChevronLeft, Phone, Send } from 'lucide-react-native';
+import { initiateCall } from '../../lib/phone';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, Vibration, View } from 'react-native';
 import { socketService } from '../../lib/socket';
@@ -13,6 +14,7 @@ export default function ProviderChatScreen() {
     const [newMessage, setNewMessage] = useState('');
     const [userId, setUserId] = useState<string | null>(null);
     const [bookingStatus, setBookingStatus] = useState<string>('confirmed');
+    const [customer, setCustomer] = useState<any>(null);
     const flatListRef = useRef<FlatList>(null);
 
     useEffect(() => {
@@ -29,9 +31,16 @@ export default function ProviderChatScreen() {
 
             if (data) setMessages(data);
 
-            // Fetch booking status
-            const { data: booking } = await supabase.from('bookings').select('status').eq('id', bookingId).single();
-            if (booking) setBookingStatus(booking.status);
+            // Fetch booking status and customer details
+            const { data: booking } = await supabase
+                .from('bookings')
+                .select('status, customer_id, profiles!bookings_customer_id_fkey(full_name, phone)')
+                .eq('id', bookingId)
+                .single();
+            if (booking) {
+                setBookingStatus(booking.status);
+                setCustomer(booking.profiles);
+            }
 
             // Socket.io Integration
             const socket = await socketService.getSocket();
@@ -40,6 +49,11 @@ export default function ProviderChatScreen() {
             const handleNewMessage = (msg: any) => {
                 if (msg.booking_id === bookingId) {
                     setMessages(current => {
+                        // 1. Replace optimistic message if tempId matches
+                        if (msg.tempId && current.find(m => m.id === msg.tempId)) {
+                            return current.map(m => m.id === msg.tempId ? msg : m);
+                        }
+                        // 2. Avoid duplicates for existing server-pushed messages
                         if (current.find(m => m.id === msg.id)) return current;
                         return [...current, msg];
                     });
@@ -81,11 +95,23 @@ export default function ProviderChatScreen() {
         const messageText = newMessage.trim();
         setNewMessage(''); // optimistic clear
 
+        const tempId = `temp-${Date.now()}`;
+        const optimisticMsg = {
+            id: tempId,
+            booking_id: bookingId,
+            sender_id: userId,
+            content: messageText + '\u200B',
+            created_at: new Date().toISOString(),
+            status: 'sending'
+        };
+        setMessages(curr => [...curr, optimisticMsg]);
+
         try {
             const socket = await socketService.getSocket();
             socket.emit('chat:sendMessage', {
                 bookingId,
-                content: messageText + '\u200B' // Zero-width space tags it as provider
+                content: messageText + '\u200B', // Zero-width space tags it as provider
+                tempId
             });
         } catch (error) {
             console.error("Error sending message:", error);
@@ -124,8 +150,13 @@ export default function ProviderChatScreen() {
                 <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
                     <ChevronLeft color="#111" size={28} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Live Chat</Text>
-                <View style={{ width: 28 }} />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={styles.headerTitle}>{customer?.full_name || 'Customer'}</Text>
+                    <Text style={{ fontSize: 12, color: '#666' }}>Active Chat</Text>
+                </View>
+                <TouchableOpacity onPress={() => initiateCall(customer?.phone)}>
+                    <Phone color={PRIMARY} size={24} />
+                </TouchableOpacity>
             </View>
 
             <FlatList

@@ -26,6 +26,7 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { formatIndianPhone } from '../../lib/phone';
 import { supabase } from '../../lib/supabase';
 
 const PRIMARY = '#1A3FFF';
@@ -112,8 +113,8 @@ export default function ProfileScreen() {
         router.replace('/auth');
     };
 
-    const displayName = profile?.full_name || user?.phone || 'Guest User';
-    const displaySub = user?.email || profile?.phone || user?.phone || '';
+    const displayName = profile?.full_name || formatIndianPhone(user?.phone) || 'Guest User';
+    const displaySub = user?.email || formatIndianPhone(profile?.phone || user?.phone) || '';
     const initials = displayName.charAt(0).toUpperCase();
 
     const MENU_SECTIONS = [
