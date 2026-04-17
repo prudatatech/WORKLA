@@ -120,7 +120,15 @@ export default function ProviderHomeScreen() {
       await api.post('/api/v1/providers/location', { latitude: loc.coords.latitude, longitude: loc.coords.longitude });
 
       const [address] = await Location.reverseGeocodeAsync({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-      if (address) setCurrentCity(address.city || address.subregion || address.district || 'Location Set');
+      if (address) {
+        const cityStr = address.city || address.subregion || address.district || 'Location Set';
+        setCurrentCity(cityStr);
+        localCache.set('provider:location', { 
+          latitude: loc.coords.latitude, 
+          longitude: loc.coords.longitude,
+          city: cityStr 
+        }, 86400);
+      }
 
       // 📶 High-frequency background updates (every 30s / every 10m movement)
       await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
@@ -136,12 +144,30 @@ export default function ProviderHomeScreen() {
         (locUpdate) => {
           setCurrentLocation({ latitude: locUpdate.coords.latitude, longitude: locUpdate.coords.longitude });
           api.post('/api/v1/providers/location', { latitude: locUpdate.coords.latitude, longitude: locUpdate.coords.longitude });
+          
+          localCache.get<any>('provider:location').then(cached => {
+            localCache.set('provider:location', {
+              ...cached,
+              latitude: locUpdate.coords.latitude,
+              longitude: locUpdate.coords.longitude
+            }, 86400);
+          });
         }
       );
     } catch { }
   };
 
   useEffect(() => {
+    // ⚡ Instant load location from cache to avoid UI pop-in
+    localCache.get<any>('provider:location').then(cachedLoc => {
+      if (cachedLoc) {
+        setCurrentCity(cachedLoc.city || '');
+        if (cachedLoc.latitude && cachedLoc.longitude) {
+          setCurrentLocation({ latitude: cachedLoc.latitude, longitude: cachedLoc.longitude });
+        }
+      }
+    });
+
     // Request notification permissions
     (async () => {
       const { status } = await safeRequestPermissions();
@@ -198,6 +224,7 @@ export default function ProviderHomeScreen() {
       setRating(cached.rating || 0);
       setWeeklyData(cached.weeklyData || [0,0,0,0,0,0,0]);
       setProviderName(cached.providerName || 'Provider');
+      if (cached.activeJob) setActiveJob(cached.activeJob);
       // isOnline is NOT read from stats cache — it has its own persistent key.
       setLoading(false); // Show content immediately from cache
       if (!force) {
@@ -230,10 +257,9 @@ export default function ProviderHomeScreen() {
 
       if (providerRes.data) {
         const sp = providerRes.data;
-        setIsOnline(sp.is_online ?? false);
+        // Do NOT overwrite local isOnline state! It causes false "offline" flips during background syncs.
         setRating(sp.avg_rating ?? 0);
         setProviderName(sp.business_name ?? 'Provider');
-        if (sp.is_online) startLocationTracking(user.id);
         
         const hasDocs = sp.provider_documents && sp.provider_documents.length > 0;
         const hasBank = sp.provider_bank_accounts && sp.provider_bank_accounts.length > 0;
@@ -255,6 +281,14 @@ export default function ProviderHomeScreen() {
         localCache.set('provider:stats', { ...currentCache, verificationStatus: sp.verification_status }, 60);
       }
 
+      let currentActiveJob = null;
+      if (activeJobRes.data && activeJobRes.data.length > 0) {
+        currentActiveJob = activeJobRes.data[0];
+        setActiveJob(currentActiveJob);
+      } else {
+        setActiveJob(null);
+      }
+
       if (analyticsRes.data) {
         const d = analyticsRes.data;
         setTodayEarnings(d.todayEarnings || 0);
@@ -268,17 +302,9 @@ export default function ProviderHomeScreen() {
           rating: d.rating || providerRes.data?.avg_rating || 0,
           weeklyData: d.weeklyData || [0,0,0,0,0,0,0],
           providerName: providerRes.data?.business_name || 'Provider',
-          verificationStatus: providerRes.data?.verification_status || 'unverified'
-        }, 300); // 5min TTL for analytics (isOnline stored separately)
-
-        // Persist the live online status to its own permanent key
-        localCache.set('provider:isOnline', providerRes.data?.is_online ?? false, 86400); // 24h TTL
-      }
-
-      if (activeJobRes.data && activeJobRes.data.length > 0) {
-        setActiveJob(activeJobRes.data[0]);
-      } else {
-        setActiveJob(null);
+          verificationStatus: providerRes.data?.verification_status || 'unverified',
+          activeJob: currentActiveJob
+        }, 300); // 5min TTL for analytics
       }
     } catch (error) {
       console.error('Error fetching analytics:', error);
@@ -559,20 +585,6 @@ export default function ProviderHomeScreen() {
         isOnline={isOnline} toggling={toggling} providerName={providerName}
         pulseAnim={pulseAnim} onToggle={toggleOnline} onBellPress={() => router.push('/explore' as any)}
       />
-
-      {/* 🧪 DEV ONLY: Test incoming job alert sound */}
-      {__DEV__ && (
-        <TouchableOpacity
-          style={{ backgroundColor: '#7C3AED', marginHorizontal: 20, marginTop: 8, padding: 12, borderRadius: 12, alignItems: 'center' }}
-          onPress={() => showIncomingJob({
-            id: 'test-offer-' + Date.now(),
-            booking_id: 'test-booking-' + Date.now(),
-            distance_km: 2.3,
-          })}
-        >
-          <Text style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>🔔 Test Job Alert (DEV)</Text>
-        </TouchableOpacity>
-      )}
 
       <ScrollView 
         contentContainerStyle={styles.scroll} 

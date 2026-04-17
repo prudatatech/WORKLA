@@ -187,10 +187,12 @@ export default function ChatScreen() {
 
     // ── Message Item ────────────────────────────────────────────────────────────
     const renderMessage = ({ item, index }: { item: any; index: number }) => {
-        const isMine = item.sender_id === userId;
+        const isMine = !(item.content?.endsWith('\u200B') || false);
+        const cleanContent = item.content ? item.content.replace(/\u200B$/, '') : '';
         const sending = item.status === 'sending';
         const prev = messages[index - 1];
-        const showAvatar = !isMine && (!prev || prev.sender_id !== item.sender_id);
+        const isPrevMine = prev ? !(prev.content?.endsWith('\u200B') || false) : null;
+        const showAvatar = !isMine && (!prev || isPrevMine !== isMine);
         const timeStr = new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         return (
@@ -204,9 +206,9 @@ export default function ChatScreen() {
                     {item.media_url && (
                         <Image source={{ uri: item.media_url }} style={styles.msgImage} resizeMode="cover" />
                     )}
-                    {item.content && (
-                        <Text style={[styles.bubbleText, isMine && styles.bubbleTextMine]}>{item.content}</Text>
-                    )}
+                    {cleanContent ? (
+                        <Text style={[styles.bubbleText, isMine && styles.bubbleTextMine]}>{cleanContent}</Text>
+                    ) : null}
                     <View style={styles.bubbleMeta}>
                         <Text style={[styles.bubbleTime, isMine && styles.bubbleTimeMine]}>{timeStr}</Text>
                         {isMine && !sending && <CheckCheck size={12} color="rgba(255,255,255,0.7)" />}

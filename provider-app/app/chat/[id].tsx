@@ -85,7 +85,7 @@ export default function ProviderChatScreen() {
             const socket = await socketService.getSocket();
             socket.emit('chat:sendMessage', {
                 bookingId,
-                content: messageText
+                content: messageText + '\u200B' // Zero-width space tags it as provider
             });
         } catch (error) {
             console.error("Error sending message:", error);
@@ -94,13 +94,20 @@ export default function ProviderChatScreen() {
     };
 
     const renderMessage = ({ item }: { item: any }) => {
-        const isMine = item.sender_id === userId;
+        const isMine = item.content?.endsWith('\u200B') || false;
+        const cleanContent = item.content ? item.content.replace(/\u200B$/, '') : '';
 
         return (
             <View style={[styles.messageBubble, isMine ? styles.myMessage : styles.theirMessage]}>
-                <Text style={[styles.messageText, isMine ? styles.myMessageText : styles.theirMessageText]}>
-                    {item.content}
-                </Text>
+                {item.media_url ? (
+                    <Text style={[styles.messageText, isMine ? styles.myMessageText : styles.theirMessageText]}>
+                        [Attachment Sent]
+                    </Text>
+                ) : (
+                    <Text style={[styles.messageText, isMine ? styles.myMessageText : styles.theirMessageText]}>
+                        {cleanContent}
+                    </Text>
+                )}
                 <Text style={[styles.timeText, isMine ? styles.myTimeText : styles.theirTimeText]}>
                     {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </Text>

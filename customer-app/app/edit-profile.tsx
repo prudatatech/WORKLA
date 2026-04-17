@@ -60,14 +60,22 @@ export default function EditProfileScreen() {
         if (!fullName.trim()) { Alert.alert('Required', 'Please enter your full name.'); return; }
         setSaving(true);
         try {
-            const res = await api.patch('/api/v1/users/me', {
+            const payload: any = {
                 full_name: fullName.trim(),
-                bio: city.trim(), // city stored in address field
+                bio: city.trim(),
                 address: city.trim(),
-                business_name: businessName.trim() || null,
-                gstin: gstin.trim().toUpperCase() || null,
                 place_of_supply: placeOfSupply.trim(),
-            });
+            };
+
+            if (businessName.trim()) {
+                payload.business_name = businessName.trim();
+            }
+
+            if (gstin.trim()) {
+                payload.gstin = gstin.trim().toUpperCase();
+            }
+
+            const res = await api.patch('/api/v1/users/me', payload);
 
             if (res.error) throw new Error(res.error);
             setSaved(true);

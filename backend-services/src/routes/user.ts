@@ -63,8 +63,10 @@ export default async function userRoutes(fastifyInstance: FastifyInstance) {
                 phone: { type: 'string', pattern: '^[0-9+ ]+$' },
                 avatar_url: { type: 'string', format: 'uri' },
                 bio: { type: 'string', maxLength: 500 },
-                business_name: { type: 'string', maxLength: 255 },
-                gstin: { type: 'string', pattern: '^[0-9A-Z]{15}$' }
+                address: { type: 'string', maxLength: 1000 },
+                business_name: { anyOf: [{ type: 'string', maxLength: 255 }, { type: 'null' }] },
+                gstin: { anyOf: [{ type: 'string', pattern: '^[0-9A-Z]{15}$' }, { type: 'null' }] },
+                place_of_supply: { type: 'string', maxLength: 100 }
             },
             additionalProperties: false
         }
@@ -74,7 +76,7 @@ export default async function userRoutes(fastifyInstance: FastifyInstance) {
         const user = request.user;
         const updates = request.body;
 
-        if (user.role !== 'CUSTOMER' && user.role !== 'ADMIN') {
+        if (user.role !== 'CUSTOMER' && user.role !== 'ADMIN' && user.role !== 'PROVIDER') {
             return reply.code(403).send({ error: 'Access Denied: Use the provider/admin endpoints for non-customer updates.' });
         }
 

@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "provider-app",
-    "owner": "saasuno.info",
+    "owner": "prudata.tech",
     "slug": "provider-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -78,9 +78,7 @@
     },
     "extra": {
       "router": {},
-      "eas": {
-        "projectId": "37d76a7c-3239-4db1-9346-7a8db498c729"
-      }
+      "eas": {}
     }
   }
 }
