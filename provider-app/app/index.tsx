@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
-import { CheckCircle2, Eye, EyeOff, Lock, LogIn, Mail, UserPlus, ArrowLeft } from 'lucide-react-native';
+import { Lock, LogIn, Mail, ArrowLeft } from 'lucide-react-native';
 import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

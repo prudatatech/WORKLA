@@ -4,7 +4,7 @@ import { pickAndCompressImage } from '../lib/image';
 import { useRouter } from 'expo-router';
 import { ChevronRight, FileText, Landmark } from 'lucide-react-native';
 import React, { useState, useEffect, useCallback } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View, Platform } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { supabase } from '../lib/supabase';
 
@@ -18,10 +18,7 @@ export default function KycScreen() {
 
     const [aadhaarUri, setAadhaarUri] = useState<string | null>(null);
     const [aadhaarNumber, setAadhaarNumber] = useState('');
-    const [aadhaarName, setAadhaarName] = useState<string>('');
 
-    const [panUri, setPanUri] = useState<string | null>(null);
-    const [panName, setPanName] = useState<string>('');
     const [panNumber, setPanNumber] = useState('');
 
     const [bankAccountName, setBankAccountName] = useState('');
@@ -77,7 +74,7 @@ export default function KycScreen() {
                     setPanName(`PAN_${Date.now()}.jpg`);
                 }
             }
-        } catch (e) {
+        } catch {
             Alert.alert('Error', 'Failed to pick image');
         }
     };

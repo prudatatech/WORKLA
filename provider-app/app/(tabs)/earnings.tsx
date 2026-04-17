@@ -29,7 +29,7 @@ const WalletEmptyImg = require('../../assets/images/wallet-empty.png');
 const PRIMARY = '#1A3FFF';
 const GREEN = '#059669';
 
-const PERIOD_TABS = ['Today', 'This Week', 'This Month', 'All'] as const;
+
 
 export default function EarningsScreen() {
     const [earnings, setEarnings] = useState<any[]>([]);

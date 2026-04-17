@@ -1,9 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { Modal, View, Text, StyleSheet, Animated, TouchableOpacity, Dimensions } from 'react-native';
-import { CheckCircle2, PartyPopper, Zap } from 'lucide-react-native';
+import { CheckCircle2, Zap } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
-const { width, height } = Dimensions.get('window');
+
 
 interface VerificationSuccessModalProps {
     visible: boolean;
@@ -45,7 +45,7 @@ export default function VerificationSuccessModal({ visible, onClose }: Verificat
             opacityAnim.setValue(0);
             rotateAnim.setValue(0);
         }
-    }, [visible]);
+    }, [visible, opacityAnim, rotateAnim, scaleAnim]);
 
     const spin = rotateAnim.interpolate({
         inputRange: [0, 1],

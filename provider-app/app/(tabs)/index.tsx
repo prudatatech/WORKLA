@@ -4,18 +4,7 @@ import * as Location from 'expo-location';
 import { useAudioPlayer } from 'expo-audio';
 import { safeRequestPermissions, safeScheduleNotification, safeSetNotificationHandler, getPushTokenAsync, setupNotificationChannels } from '../../lib/notifications';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { AlertTriangle, ChevronRight } from 'lucide-react-native';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Animated, AppState, AppStateStatus, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, Vibration, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import ProviderHero from '../../components/home/ProviderHero';
-import StatsRow from '../../components/home/StatsRow';
-import WeeklyChart from '../../components/home/WeeklyChart';
-import LiveMap from '../../components/home/LiveMap';
-import IncomingJobModal from '../../components/home/IncomingJobModal';
-import VerificationSuccessModal from '../../components/VerificationSuccessModal';
-import { StatCardSkeleton, EarningRowSkeleton } from '../../components/SkeletonLoader';
-import { Clock, MapPin } from 'lucide-react-native';
+import { AlertTriangle, ChevronRight, MapPin } from 'lucide-react-native';
 import { api } from '../../lib/api';
 import { localCache } from '../../lib/localCache';
 import { socketService } from '../../lib/socket';
@@ -219,13 +208,13 @@ export default function ProviderHomeScreen() {
             console.warn('[App] Foregrounded — syncing location & stats');
             const { data: { user } } = await supabase.auth.getUser();
             if (user) startLocationTracking(user.id);
-            loadStats();
-        }
-        appStateRef.current = nextState;
-    });
+        loadStats();
+    }
+    appStateRef.current = nextState;
+});
 
-    return () => subscription.remove();
-  }, []);
+return () => subscription.remove();
+}, [loadStats]);
 
   const loadStats = useCallback(async (force = false) => {
     // ── Instant: Show cached stats while refreshing in background ──
@@ -378,7 +367,7 @@ export default function ProviderHomeScreen() {
         const msg = e.response?.data?.error || e.response?.data?.message || e.message;
         Alert.alert('Error', msg || 'Failed to accept job'); 
     }
-  }, [slideAnim, loadStats, stopJobAlertSound]);
+  }, [slideAnim, loadStats, stopJobAlertSound, router]);
 
   const showIncomingJob = useCallback(async (offer: any) => {
     let bookingData: any = null;

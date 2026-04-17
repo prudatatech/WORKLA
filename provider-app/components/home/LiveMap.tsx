@@ -1,7 +1,7 @@
 import { MapPin } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 
 const PRIMARY = '#1A3FFF';
 
@@ -51,6 +51,8 @@ const LiveMap = React.memo(({ currentLocation, currentCity }: LiveMapProps) => {
   const lngDiff = Math.abs(prev.currentLocation.longitude - next.currentLocation.longitude);
   return latDiff < 0.0001 && lngDiff < 0.0001 && prev.currentCity === next.currentCity;
 });
+
+LiveMap.displayName = 'LiveMap';
 
 export default LiveMap;
 

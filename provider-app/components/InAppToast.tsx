@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Animated, Text, View, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 
 interface ToastProps {
@@ -58,7 +58,7 @@ export default function InAppToast({ visible, title, body, type = 'info', durati
         return () => {
             if (timeoutRef.current) clearTimeout(timeoutRef.current);
         };
-    }, [visible, duration, translateY, opacity]);
+    }, [visible, duration, translateY, opacity, hideToast]);
 
     if (!visible && !title) return null;
 

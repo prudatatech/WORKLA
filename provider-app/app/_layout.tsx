@@ -4,14 +4,10 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as TaskManager from 'expo-task-manager';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform, Alert } from 'react-native';
+import { Alert } from 'react-native';
 import { Buffer } from 'buffer';
-
-// Fix for react-native-svg / lucide-react-native buffer dependency
-if (typeof global.Buffer === 'undefined') {
-  global.Buffer = Buffer;
-}
 import 'react-native-reanimated';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '../lib/supabase';
 import { socketService } from '../lib/socket';
 import NetworkBanner from '../components/NetworkBanner';
@@ -29,8 +25,6 @@ const getNotifications = () => {
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
-
-import { useColorScheme } from '@/hooks/use-color-scheme';
 
 const LOCATION_TASK_NAME = 'BACKGROUND_LOCATION_TASK';
 
@@ -187,7 +181,7 @@ export default function RootLayout() {
     };
 
     performNavigation();
-  }, [session?.user?.id, initialized, segments[0]]);
+  }, [session, initialized, segments, router]);
 
   // 3. Socket.io Notification Handler
   useEffect(() => {

@@ -1,10 +1,7 @@
-import { decode } from 'base64-arraybuffer';
-import * as FileSystem from 'expo-file-system/legacy';
-import { pickAndCompressImage } from '../lib/image';
 import { useRouter } from 'expo-router';
-import { Briefcase, ChevronRight, FileText, Landmark, MapPin, User } from 'lucide-react-native';
+import { Briefcase, ChevronRight, MapPin, User } from 'lucide-react-native';
 import React, { useState, useEffect, useCallback } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View, Platform } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { supabase } from '../lib/supabase';
 
