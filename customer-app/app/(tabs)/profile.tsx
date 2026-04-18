@@ -42,59 +42,54 @@ export default function ProfileScreen() {
 
     const loadProfile = useCallback(async () => {
         setLoading(true);
-        const { data: { user: u } } = await supabase.auth.getUser();
-        setUser(u);
-        if (!u) {
-            router.replace('/auth');
-            return;
+        try {
+            console.log('[CUSTOMER DEBUG] Starting profile load...');
+            
+            // 🕒 5-second safety timeout for auth check
+            const sessionPromise = supabase.auth.getSession();
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Auth Timeout')), 5000));
+            
+            const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
+            const u = session?.user;
+            setUser(u);
+
+            if (!u) {
+                console.warn('[CUSTOMER DEBUG] No session found');
+                router.replace('/auth');
+                return;
+            }
+
+            console.log('[SUPABASE DEBUG] Loading data for:', u.id);
+            // 1. Parallel fetch with separate error handling
+            const [profRes, bookingRes, walletRes, goldRes, couponRes] = await Promise.all([
+                supabase.from('profiles').select('full_name, avatar_url, city, referral_code, phone').eq('id', u.id).single(),
+                supabase.from('bookings').select('id, total_amount, status').eq('customer_id', u.id),
+                supabase.from('wallets').select('balance').eq('customer_id', u.id).maybeSingle(),
+                supabase.from('profiles').select('is_gold').eq('id', u.id).single(),
+                supabase.from('coupons').select('*', { count: 'exact', head: true }).eq('is_active', true).gte('valid_till', new Date().toISOString())
+            ]);
+
+            if (profRes.error) console.error('[SUPABASE ERROR] Profiles:', profRes.error.message);
+            if (profRes.data) setProfile(profRes.data);
+
+            if (bookingRes.data) {
+                const totalCompleted = bookingRes.data.filter(b => b.status === 'completed').length;
+                const totalSpent = bookingRes.data
+                    .filter(b => b.status === 'completed')
+                    .reduce((sum, b) => sum + (b.total_amount || 0), 0);
+                setStats(prev => ({ ...prev, bookings: totalCompleted, spent: totalSpent }));
+            }
+
+            setWalletBalance(walletRes.data?.balance ?? 0);
+            setIsGold(!!goldRes.data?.is_gold);
+            setStats(prev => ({ ...prev, coupons: couponRes.count ?? 0 }));
+
+            console.log('[SUPABASE SUCCESS] Customer profile loaded');
+        } catch (e: any) {
+            console.error('[CUSTOMER FATAL ERROR]:', e.message || e);
+        } finally {
+            setLoading(false);
         }
-
-        // 1. Full profile with referral_code
-        const { data: prof } = await supabase
-            .from('profiles')
-            .select('full_name, avatar_url, city, referral_code, phone')
-            .eq('id', u.id)
-            .single();
-        if (prof) setProfile(prof);
-
-        // 2. Booking stats
-        const { data: bookingData } = await supabase
-            .from('bookings')
-            .select('id, total_amount, status')
-            .eq('customer_id', u.id);
-        if (bookingData) {
-            const totalCompleted = bookingData.filter(b => b.status === 'completed').length;
-            const totalSpent = bookingData
-                .filter(b => b.status === 'completed')
-                .reduce((sum, b) => sum + (b.total_amount || 0), 0);
-            setStats(prev => ({ ...prev, bookings: totalCompleted, spent: totalSpent }));
-        }
-
-        // 3. Wallet balance - query wallets table directly (wallet_balance view is deprecated)
-        const { data: wallet } = await supabase
-            .from('wallets')
-            .select('balance')
-            .eq('customer_id', u.id)
-            .maybeSingle();
-        setWalletBalance(wallet?.balance ?? 0);
-
-        // 4. Gold subscription
-        const { data: profData } = await supabase
-            .from('profiles')
-            .select('is_gold')
-            .eq('id', u.id)
-            .single();
-        setIsGold(!!profData?.is_gold);
-
-        // 5. Available coupon count
-        const { count } = await supabase
-            .from('coupons')
-            .select('*', { count: 'exact', head: true })
-            .eq('is_active', true)
-            .gte('valid_till', new Date().toISOString());
-        setStats(prev => ({ ...prev, coupons: count ?? 0 }));
-
-        setLoading(false);
     }, [router]);
 
     const [refreshing, setRefreshing] = useState(false);

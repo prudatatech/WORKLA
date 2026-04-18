@@ -55,6 +55,13 @@ export default function MyJobsScreen() {
     }
 
     try {
+      console.log('[JOBS DEBUG] Fetching jobs...');
+      // 🛡️ 5-second safety timeout
+      const sessionPromise = supabase.auth.getUser();
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Jobs Timeout')), 5000));
+      
+      await Promise.race([sessionPromise, timeoutPromise]);
+
       // bustCache=true adds ?refresh=true to bypass the backend Redis cache after status changes
       const suffix = bustCache ? '&refresh=true' : '';
       const res = await api.get(`/api/v1/bookings?role=provider&status=${statusFilter}${suffix}`);

@@ -1,31 +1,39 @@
 {
-    "build": {
-        "development": {
-            "developmentClient": true,
-            "distribution": "internal"
-        },
-        "preview": {
-            "distribution": "internal",
-            "channel": "preview",
-            "android": {
-                "buildType": "apk"
-            },
-            "env": {
-                "EXPO_PUBLIC_SUPABASE_URL": "https://worklabackend.prudata-tech.workers.dev/supabase",
-                "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0d2VreWx6dWN0YXRjZ3lya2ZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMDI0OTEsImV4cCI6MjA5MTY3ODQ5MX0.4HFUbCqiO4pr6Bm6sHZc7Ifj6oHsYfiB5KN8cmZyeJs",
-                "EXPO_PUBLIC_API_URL": "https://worklabackend.prudata-tech.workers.dev"
-            }
-        },
-        "production": {
-            "channel": "production",
-            "env": {
-                "EXPO_PUBLIC_SUPABASE_URL": "https://worklabackend.prudata-tech.workers.dev/supabase",
-                "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0d2VreWx6dWN0YXRjZ3lya2ZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMDI0OTEsImV4cCI6MjA5MTY3ODQ5MX0.4HFUbCqiO4pr6Bm6sHZc7Ifj6oHsYfiB5KN8cmZyeJs",
-                "EXPO_PUBLIC_API_URL": "https://worklabackend.prudata-tech.workers.dev"
-            }
-        }
+  "cli": {
+    "version": ">= 5.9.1",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
     },
-    "submit": {
-        "production": {}
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://dbworkla.prudata-tech.workers.dev",
+        "EXPO_PUBLIC_API_URL": "https://worklabackend.prudata-tech.workers.dev",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0d2VreWx6dWN0YXRjZ3lya2ZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMDI0OTEsImV4cCI6MjA5MTY3ODQ5MX0.4HFUbCqiO4pr6Bm6sHZc7Ifj6oHsYfiB5KN8cmZyeJs"
+      }
+    },
+    "production": {
+      "channel": "production",
+      "autoIncrement": true,
+      "android": {
+        "gradleCommand": ":app:assembleRelease",
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://dbworkla.prudata-tech.workers.dev",
+        "EXPO_PUBLIC_API_URL": "https://worklabackend.prudata-tech.workers.dev",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0d2VreWx6dWN0YXRjZ3lya2ZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMDI0OTEsImV4cCI6MjA5MTY3ODQ5MX0.4HFUbCqiO4pr6Bm6sHZc7Ifj6oHsYfiB5KN8cmZyeJs"
+      }
     }
+  },
+  "submit": {
+    "production": {}
+  }
 }

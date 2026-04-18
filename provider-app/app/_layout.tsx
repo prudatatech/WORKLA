@@ -144,6 +144,7 @@ export default function RootLayout() {
     const isResetting = rootSegment === 'reset-password';
     const isTabs = rootSegment === '(tabs)';
     const isIndex = !rootSegment;
+    const isAllowedRoot = rootSegment === 'services' || rootSegment === 'payouts' || rootSegment === 'service-areas';
 
     const performNavigation = async () => {
       if (!session) {
@@ -163,13 +164,13 @@ export default function RootLayout() {
           if (error) throw error;
 
           if (data?.onboarding_completed) {
-            if (!isTabs) {
+            if (!isTabs && !isAllowedRoot) {
               isRedirecting.current = true;
               router.replace('/(tabs)');
               setTimeout(() => { isRedirecting.current = false; }, 500);
             }
           } else {
-            if (!inOnboarding) {
+            if (!inOnboarding && !isAllowedRoot) {
               isRedirecting.current = true;
               router.replace('/onboarding');
               setTimeout(() => { isRedirecting.current = false; }, 500);
@@ -177,7 +178,7 @@ export default function RootLayout() {
           }
         } catch (e) {
           console.error('Onboarding check failed:', e);
-          if (!inOnboarding && !isTabs) {
+          if (!inOnboarding && !isTabs && !isAllowedRoot) {
             isRedirecting.current = true;
             router.replace('/onboarding');
             setTimeout(() => { isRedirecting.current = false; }, 500);

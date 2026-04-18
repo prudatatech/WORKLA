@@ -112,18 +112,28 @@ function MyBookingsScreen() {
     }
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      console.log('[BOOKINGS DEBUG] Fetching bookings...');
+      // 🛡️ 5-second safety timeout for auth + api
+      const sessionPromise = supabase.auth.getUser();
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Auth Timeout')), 5000));
+      
+      const { data: { user } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
+
       if (!user) {
+        console.warn('[BOOKINGS DEBUG] No user found');
         if (!isSilent) router.replace('/auth');
         return;
       }
+
+      console.log('[BOOKINGS DEBUG] Fetching from API...');
       const res = await api.get('/api/v1/bookings');
       if (res.data) {
+        console.log('[BOOKINGS DEBUG] Success:', res.data.length, 'bookings');
         setBookings(res.data);
         localCache.set(cacheKey, res.data, 600); // Cache for 10 minutes
       }
-    } catch (e) {
-      console.error('Fetch error:', e);
+    } catch (e: any) {
+      console.error('[BOOKINGS DEBUG] Error:', e.message || e);
     } finally {
       setLoading(false);
       setRefreshing(false);

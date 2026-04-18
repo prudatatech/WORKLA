@@ -182,8 +182,8 @@ export default async function earningsRoutes(fastifyInstance: FastifyInstance) {
             // 1. Get or create wallet
             const { data: initialWallet, error: walletError } = await supabaseAdmin
                 .from('wallets')
-                .select('id, balance')
-                .eq('customer_id', user.sub)
+                .select('user_id, balance')
+                .eq('user_id', user.sub)
                 .single();
             
             let wallet = initialWallet;
@@ -192,11 +192,11 @@ export default async function earningsRoutes(fastifyInstance: FastifyInstance) {
                 // No wallet exists — create one
                 const { data: newWallet, error: createError } = await supabaseAdmin
                     .from('wallets')
-                    .insert({ customer_id: user.sub, balance: 0 })
-                    .select('id, balance')
+                    .insert({ user_id: user.sub, balance: 0 })
+                    .select('user_id, balance')
                     .single();
                 if (createError) throw createError;
-                wallet = newWallet;
+                wallet = { id: newWallet.user_id, balance: newWallet.balance };
             } else if (walletError) {
                 throw walletError;
             }
@@ -213,8 +213,8 @@ export default async function earningsRoutes(fastifyInstance: FastifyInstance) {
 
             // 3. Log the transaction
             await supabaseAdmin.from('wallet_transactions').insert({
-                wallet_id: wallet!.id,
-                customer_id: user.sub,
+                wallet_id: (wallet as any).user_id || (wallet as any).id,
+                user_id: user.sub,
                 type: 'credit',
                 amount,
                 description: `Wallet top-up via ${paymentMethod}`,

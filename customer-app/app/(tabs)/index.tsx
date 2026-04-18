@@ -110,54 +110,42 @@ export default function HomeScreen() {
       }
     }
 
-    setLoading(prev => isRefresh ? true : prev); // Only show spinner if we had no cache
+    setLoading(prev => isRefresh ? true : prev); 
     try {
+      console.log('[HOME DEBUG] Starting data fetch...');
       const queryParams = isRefresh ? '?refresh=true' : '';
-
       setServicesError(null);
       
-      // Phase 1: Load auth, then services
-      const authRes = await supabase.auth.getSession();
-      const srvRes = await api.get(`/api/v1/services${queryParams}`);
-
-      const session = authRes.data.session;
+      // Phase 1: Auth + Core Services (with 5s Timeout)
+      const sessionPromise = supabase.auth.getSession();
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Auth Timeout')), 5000));
+      
+      console.log('[HOME DEBUG] Phase 1: Checking session...');
+      const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
       const user = session?.user;
+
+      console.log('[HOME DEBUG] Phase 1: Fetching services...');
+      const srvRes = await api.get(`/api/v1/services${queryParams}`);
 
       // If backend returned services, use them
       if (srvRes.data && Array.isArray(srvRes.data)) {
         const mapped = (srvRes.data as any[]).filter((s: any) => (s.priority_number || 0) <= 10).map(mapService);
-        
-        // ⚡ Intelligent State Update: Only update if content changed to prevent flicker
         setServices(prev => JSON.stringify(prev) === JSON.stringify(mapped) ? prev : mapped);
-        
-        const cacheData = srvRes.data.filter((s: any) => (s.priority_number || 0) <= 10);
-        localCache.set('home:services', cacheData, 600); // Cache for 10 min
+        localCache.set('home:services', srvRes.data.filter((s: any) => (s.priority_number || 0) <= 10), 600);
       } else {
-        // Fallback: load services directly from Supabase when backend is down
-        console.warn('[Home] Backend services failed, using Supabase fallback');
-        try {
-          const { data: fallbackServices } = await supabase
-            .from('services')
-            .select('id, name, slug, description, image_url, display_order')
-            .eq('is_active', true)
-            .order('display_order', { ascending: true })
-            .limit(20);
+        console.warn('[HOME] Backend services failed, using Supabase fallback');
+        const { data: fallbackServices } = await supabase
+          .from('services').select('id, name, slug, description, image_url, display_order')
+          .eq('is_active', true).order('display_order', { ascending: true }).limit(20);
 
-          if (fallbackServices && fallbackServices.length > 0) {
-            setServicesError(null);
-            const mapped = fallbackServices.map(mapService);
-            setServices(prev => JSON.stringify(prev) === JSON.stringify(mapped) ? prev : mapped);
-            localCache.set('home:services', fallbackServices, 600);
-          } else {
-            setServicesError(srvRes.error || 'Services unavailable');
-          }
-        } catch {
+        if (fallbackServices?.length) {
+          const mapped = fallbackServices.map(mapService);
+          setServices(prev => JSON.stringify(prev) === JSON.stringify(mapped) ? prev : mapped);
+          localCache.set('home:services', fallbackServices, 600);
+        } else {
           setServicesError(srvRes.error || 'Services unavailable');
         }
       }
-
-      // Show content immediately — don't block on featured/banners
-      setLoading(false);
 
       // Phase 2: Load featured & banners in background (non-blocking)
       (async () => {

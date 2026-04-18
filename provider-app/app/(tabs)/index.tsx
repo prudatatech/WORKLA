@@ -255,14 +255,15 @@ export default function ProviderHomeScreen() {
     if (!user) return;
 
     try {
-      // 🛡️ Only show skeleton on the VERY FIRST load when there's no cached data.
-      // Never toggle loading during background refreshes — it unmounts the entire
-      // component tree (including MapView) causing the visible "reload" flicker.
       if (!hasDataToShow) {
         setLoading(true);
       }
-      // 🛡️ Pre-fetch session explicitly to avoid concurrent AsyncStorage lockups on Android during Promise.all
-      await supabase.auth.getSession();
+      console.log('[DASHBOARD DEBUG] Fetching stats...');
+      // 🛡️ 5-second safety timeout for auth + initial parallel batch
+      const sessionPromise = supabase.auth.getSession();
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Stats Timeout')), 5000));
+      
+      await Promise.race([sessionPromise, timeoutPromise]);
 
       const [providerRes, analyticsRes, activeJobRes] = await Promise.all([
         supabase

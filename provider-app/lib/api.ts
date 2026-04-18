@@ -20,10 +20,18 @@ async function getCachedToken(): Promise<string | null> {
 
     _tokenPromise = (async () => {
         try {
-            const { data: { session } } = await supabase.auth.getSession();
+            // 🕒 5-second timeout for session retrieval through proxy
+            const sessionPromise = supabase.auth.getSession();
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Auth Token Timeout')), 5000));
+            
+            const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
+            
             _cachedToken = session?.access_token ?? null;
             _tokenExpiresAt = Date.now() + 4 * 60 * 1000; // cache for 4 minutes
             return _cachedToken;
+        } catch (e: any) {
+            console.error('[API AUTH ERROR]:', e.message || e);
+            return null;
         } finally {
             _tokenPromise = null;
         }
@@ -72,6 +80,13 @@ export async function apiRequest<T = any>(
         });
 
         clearTimeout(timeoutId);
+
+        // 🔍 DEBUG: Inspect Proxy Response
+        console.log(`[PROXY DEBUG] ${path} -> Status: ${response.status}`);
+        if (response.status >= 400) {
+            const errText = await response.clone().text();
+            console.error(`[PROXY ERROR] Body: ${errText.substring(0, 200)}`);
+        }
 
         if (response.status === 204) return { data: null, error: null };
 

@@ -39,26 +39,31 @@ export default function ProviderServicesScreen() {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const { data: { user } } = await supabase.auth.getUser();
+            console.log('[SERVICES DEBUG] Fetching catalog and skills...');
+            // 🛡️ 5-second safety timeout for the whole batch
+            const sessionPromise = supabase.auth.getUser();
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Fetch Timeout')), 5000));
+            
+            const { data: { user } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
             if (!user) return;
 
-            // 1. Fetch catalog
-            const { data: srvs } = await supabase.from('services').select('*').order('name');
-            const { data: subs } = await supabase.from('service_subcategories').select('*').order('name');
+            // Fetch everything in parallel for maximum speed
+            const [srvsRes, subsRes, detailsRes] = await Promise.all([
+                supabase.from('services').select('*').order('name'),
+                supabase.from('service_subcategories').select('*').order('name'),
+                supabase.from('provider_details').select('supported_services, supported_subservices').eq('provider_id', user.id).single()
+            ]);
 
-            // 2. Fetch my current skills from provider_details array columns
-            const { data: details } = await supabase
-                .from('provider_details')
-                .select('supported_services, supported_subservices')
-                .eq('provider_id', user.id)
-                .single();
-
-            setServices(srvs || []);
-            setSubcategories(subs || []);
-            setSelectedServices(details?.supported_services || []);
-            setSelectedSubservices(details?.supported_subservices || []);
-        } catch (error) {
-            console.error(error);
+            if (srvsRes.error) console.warn('[SERVICES] Catalog error:', srvsRes.error.message);
+            
+            setServices(srvsRes.data || []);
+            setSubcategories(subsRes.data || []);
+            setSelectedServices(detailsRes.data?.supported_services || []);
+            setSelectedSubservices(detailsRes.data?.supported_subservices || []);
+            console.log('[SERVICES DEBUG] Catalog loaded successfully');
+        } catch (error: any) {
+            console.error('[SERVICES DEBUG] Error:', error.message || error);
+            Alert.alert('Network Timeout', 'Could not load service categories. Please check your connection.');
         } finally {
             setLoading(false);
         }
