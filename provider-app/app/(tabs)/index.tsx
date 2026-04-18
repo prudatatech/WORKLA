@@ -69,6 +69,10 @@ export default function ProviderHomeScreen() {
   const player = useAudioPlayer(require('../../assets/sounds/job_alert.mp3')); // expo-audio player
   const jobCancelSubRef = useRef<any>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  // 🔒 Stable refs to break callback dependency chains
+  const loadStatsRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const subscribeRef = useRef<() => Promise<(() => void)>>(() => Promise.resolve(() => {}));
+  const hasMountedRef = useRef(false);
 
   // ⚡ Default to ALWAYS ON. Only turn off if the user explicitly clicked the toggle (cached === false).
   // Also auto-reconnect to backend and resume background tracking on open.
@@ -218,13 +222,14 @@ export default function ProviderHomeScreen() {
             console.warn('[App] Foregrounded — syncing location & stats');
             const { data: { user } } = await supabase.auth.getUser();
             if (user) startLocationTracking(user.id);
-        loadStats();
-    }
-    appStateRef.current = nextState;
-});
+            loadStatsRef.current(); // Use ref to avoid stale closure
+        }
+        appStateRef.current = nextState;
+    });
 
-return () => subscription.remove();
-}, [loadStats]);
+    return () => subscription.remove();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loadStats = useCallback(async (force = false) => {
     // ── Instant: Show cached stats while refreshing in background ──
@@ -323,6 +328,9 @@ return () => subscription.remove();
       setLoading(false);
     }
   }, []);
+
+  // 🔒 Keep loadStatsRef in sync on every render so refs always call the latest version
+  loadStatsRef.current = loadStats;
 
   // 🔔 Sound helper: play looping ringtone (expo-audio)
   const playJobAlertSound = useCallback(async () => {
@@ -506,23 +514,38 @@ return () => subscription.remove();
     };
   }, [showIncomingJob, loadStats]);
 
-  useEffect(() => { 
-    loadStats(); 
-    let cleanup: any = null;
-    subscribeToOffers().then(c => cleanup = c); 
-    return () => { if (cleanup) cleanup(); };
-  }, [loadStats, subscribeToOffers]);
+  // Keep subscribeRef in sync
+  subscribeRef.current = subscribeToOffers;
 
-  // Silent refresh when tab is re-focused (e.g. after accepting a job)
+  // 🔑 Single mount effect — runs ONCE. Uses refs to avoid dependency chain re-renders.
+  useEffect(() => {
+    if (hasMountedRef.current) return;
+    hasMountedRef.current = true;
+
+    loadStatsRef.current();
+    let cleanup: (() => void) | null = null;
+    subscribeRef.current().then(c => { cleanup = c; });
+    return () => { if (cleanup) cleanup(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 🧠 Throttled focus refresh — only reload if >30s since last load
+  const lastLoadTimeRef = useRef(0);
   useFocusEffect(
     useCallback(() => {
-      loadStats();
-    }, [loadStats])
+      const now = Date.now();
+      if (now - lastLoadTimeRef.current > 30000) {
+        lastLoadTimeRef.current = now;
+        loadStatsRef.current();
+      }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
   );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    lastLoadTimeRef.current = Date.now();
     await loadStats();
     setRefreshing(false);
   }, [loadStats]);

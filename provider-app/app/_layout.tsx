@@ -187,7 +187,8 @@ export default function RootLayout() {
     };
 
     performNavigation();
-  }, [session, initialized, segments, router]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id, initialized, segments[0]]);
 
   // 3. Socket.io Notification Handler
   useEffect(() => {
