@@ -45,19 +45,30 @@ export default function PayoutScreen() {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            // 1. Fetch wallet balance
-            const earningsRes = await api.get('/api/v1/earnings/stats');
-            if (earningsRes.data) {
-                setBalance(earningsRes.data.walletBalance || 0);
+            console.log('[PAYOUTS DEBUG] Fetching balance and history...');
+            // 🛡️ 5-second safety timeout
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Payouts Timeout')), 5000));
+            
+            // 1. Fetch wallet balance from the ledger
+            const walletPromise = api.get('/api/v1/earnings/wallet');
+            const historyPromise = api.get('/api/v1/payouts/history');
+
+            const [walletRes, historyRes] = await Promise.race([
+                Promise.all([walletPromise, historyPromise]),
+                timeoutPromise
+            ]) as any;
+
+            if (walletRes.data) {
+                // The new ledger view uses digital_balance
+                setBalance(walletRes.data.digital_balance || 0);
             }
 
-            // 2. Fetch payout history
-            const historyRes = await api.get('/api/v1/payouts/history');
             if (historyRes.data) {
                 setHistory(historyRes.data);
             }
+            console.log('[PAYOUTS DEBUG] Data loaded successfully');
         } catch (e) {
-            console.error('Failed to fetch payout data:', e);
+            console.error('[PAYOUTS DEBUG] Failed to fetch payout data:', e);
         } finally {
             setLoading(false);
         }

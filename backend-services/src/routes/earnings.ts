@@ -196,7 +196,7 @@ export default async function earningsRoutes(fastifyInstance: FastifyInstance) {
                     .select('user_id, balance')
                     .single();
                 if (createError) throw createError;
-                wallet = { id: newWallet.user_id, balance: newWallet.balance };
+                wallet = { user_id: newWallet.user_id, balance: newWallet.balance };
             } else if (walletError) {
                 throw walletError;
             }
@@ -207,13 +207,13 @@ export default async function earningsRoutes(fastifyInstance: FastifyInstance) {
             const { error: updateError } = await supabaseAdmin
                 .from('wallets')
                 .update({ balance: newBalance })
-                .eq('id', wallet!.id);
+                .eq('user_id', wallet!.user_id);
 
             if (updateError) throw updateError;
 
             // 3. Log the transaction
             await supabaseAdmin.from('wallet_transactions').insert({
-                wallet_id: (wallet as any).user_id || (wallet as any).id,
+                wallet_id: wallet!.user_id,
                 user_id: user.sub,
                 type: 'credit',
                 amount,

@@ -46,9 +46,9 @@ export default async function payoutRoutes(fastifyInstance: FastifyInstance) {
                 return reply.code(400).send({ error: 'Insufficient balance.' });
             }
 
-            // 2. Create payout record
+            // 2. Create payout request record
             const { data: payout, error: payoutErr } = await supabaseAdmin
-                .from('payouts')
+                .from('payout_requests')
                 .insert({
                     provider_id: user.sub,
                     amount: amount,
@@ -99,10 +99,10 @@ export default async function payoutRoutes(fastifyInstance: FastifyInstance) {
 
         try {
             const { data, error } = await supabaseAdmin
-                .from('payouts')
+                .from('payout_requests')
                 .select('*')
                 .eq('provider_id', user.sub)
-                .order('initiated_at', { ascending: false })
+                .order('created_at', { ascending: false })
                 .range(offset, offset + limit - 1);
 
             if (error) {
