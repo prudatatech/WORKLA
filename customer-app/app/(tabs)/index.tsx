@@ -80,6 +80,12 @@ export default function HomeScreen() {
     Icon: getIconForCategory(s.slug), bg: getBgForCategory(s.slug), color: getColorForCategory(s.slug),
   });
 
+  // 🔒 Stable refs to call latest callbacks without being dependencies
+  const loadDataRef = useRef<(isRefresh?: boolean) => Promise<void>>(() => Promise.resolve());
+  const subscribeRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const startPulseRef = useRef<() => void>(() => {});
+  const hasMountedRef = useRef(false);
+
   const loadData = useCallback(async (isRefresh = false) => {
     // ── Instant: Show cached data while we fetch fresh ──
     if (!isRefresh) {
@@ -259,6 +265,9 @@ export default function HomeScreen() {
     }
   }, [bannerSlide, setRawLocationName, autoDetectAddress]);
 
+  // Sync refs on each render so they always call the latest version
+  loadDataRef.current = loadData;
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadData(true);
@@ -314,6 +323,9 @@ export default function HomeScreen() {
     realtimeChannelRef.current = channel;
   }, [bannerSlide, loadData]);
 
+  // Sync refs
+  subscribeRef.current = subscribeToBookingUpdates;
+
   // 🛡️ Start pulse animation (extracted for reuse)
   const startPulseAnimation = useCallback(() => {
     const anim = Animated.loop(
@@ -326,6 +338,9 @@ export default function HomeScreen() {
     pulseAnimRef.current = anim;
     anim.start();
   }, [notifPulse]);
+
+  // Sync ref
+  startPulseRef.current = startPulseAnimation;
 
   // 🛡️ AppState lifecycle: pause everything in background, resume in foreground
   useEffect(() => {
@@ -354,16 +369,16 @@ export default function HomeScreen() {
         console.log('[Home] Foregrounded — resuming animations & data');
         
         // Resume animation
-        startPulseAnimation();
+        startPulseRef.current();
         
         // Re-subscribe realtime
-        subscribeToBookingUpdates();
+        subscribeRef.current();
         
         // 🛡️ Soft refresh data — only if it's been > 5 minutes to prevent annoying reloads
         const awayTime = Date.now() - lastBackgroundTimeRef.current;
         if (awayTime > 5 * 60 * 1000) {
           console.log('[Home] Away for > 5m, refreshing data');
-          loadData();
+          loadDataRef.current();
         } else {
           console.log('[Home] Away for brief moment, skipping reload');
         }
@@ -372,7 +387,8 @@ export default function HomeScreen() {
 
     const sub = AppState.addEventListener('change', handleAppStateChange);
     return () => sub.remove();
-  }, [loadData, startPulseAnimation, subscribeToBookingUpdates]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Refresh data when screen comes into focus — debounced to 2 minutes
   // This prevents hammering the API on every tab switch
@@ -381,26 +397,27 @@ export default function HomeScreen() {
       const now = Date.now();
       if (now - lastLoadTimeRef.current > 2 * 60 * 1000) {
         lastLoadTimeRef.current = now;
-        loadData();
+        loadDataRef.current();
       }
-    }, [loadData])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
   );
 
-  // Initial setup on mount
+  // 🔑 Single mount effect — runs ONCE, uses refs to avoid re-run loops
   useEffect(() => {
-    loadData();
-    startPulseAnimation();
-    subscribeToBookingUpdates();
+    if (hasMountedRef.current) return;
+    hasMountedRef.current = true;
+
+    loadDataRef.current();
+    startPulseRef.current();
+    subscribeRef.current();
 
     return () => {
-      if (pulseAnimRef.current) {
-        pulseAnimRef.current.stop();
-      }
-      if (realtimeChannelRef.current) {
-        supabase.removeChannel(realtimeChannelRef.current);
-      }
+      if (pulseAnimRef.current) pulseAnimRef.current.stop();
+      if (realtimeChannelRef.current) supabase.removeChannel(realtimeChannelRef.current);
     };
-  }, [loadData, startPulseAnimation, subscribeToBookingUpdates]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const dismissBanner = () => {
     isBannerDismissedThisSession = true;

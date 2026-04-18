@@ -143,7 +143,7 @@ export default function RootLayout() {
       // User is logged in but on a non-authenticated screen — redirect to home
       router.replace('/(tabs)');
     }
-  }, [session, initialized, segments, router]);
+  }, [session?.user?.id, initialized, segments[0]]);
 
   // 🛡️ AppState lifecycle: pause/resume realtime when app backgrounds/foregrounds
   useEffect(() => {
@@ -170,7 +170,8 @@ export default function RootLayout() {
 
     const sub = AppState.addEventListener('change', handleAppStateChange);
     return () => sub.remove();
-  }, [session, subscribeToNotifications]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Socket.io real-time alerts — uses the AppState-aware socketService
   useEffect(() => {
