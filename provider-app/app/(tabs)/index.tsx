@@ -261,6 +261,9 @@ export default function ProviderHomeScreen() {
       if (!hasDataToShow) {
         setLoading(true);
       }
+      // 🛡️ Pre-fetch session explicitly to avoid concurrent AsyncStorage lockups on Android during Promise.all
+      await supabase.auth.getSession();
+
       const [providerRes, analyticsRes, activeJobRes] = await Promise.all([
         supabase
           .from('provider_details')

@@ -43,6 +43,7 @@ export default function InsightsScreen() {
     const fetchInsights = useCallback(async () => {
         setLoading(true);
         try {
+            await supabase.auth.getSession(); // Pre-fetch session explicitly to prevent any cache race conditions
             const [statsRes, earningsRes] = await Promise.all([
                 api.get('/api/v1/providers/analytics'),
                 api.get(`/api/v1/providers/analytics/earnings?period=${period}`)

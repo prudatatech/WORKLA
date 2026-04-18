@@ -114,18 +114,17 @@ export default function HomeScreen() {
     try {
       const queryParams = isRefresh ? '?refresh=true' : '';
 
-      // Phase 1: Load services + auth in parallel
-      const [srvRes, authRes] = await Promise.all([
-        api.get(`/api/v1/services${queryParams}`),
-        supabase.auth.getSession()
-      ]);
+      setServicesError(null);
+      
+      // Phase 1: Load auth, then services
+      const authRes = await supabase.auth.getSession();
+      const srvRes = await api.get(`/api/v1/services${queryParams}`);
 
       const session = authRes.data.session;
       const user = session?.user;
 
       // If backend returned services, use them
       if (srvRes.data && Array.isArray(srvRes.data)) {
-        setServicesError(null);
         const mapped = (srvRes.data as any[]).filter((s: any) => (s.priority_number || 0) <= 10).map(mapService);
         
         // ⚡ Intelligent State Update: Only update if content changed to prevent flicker

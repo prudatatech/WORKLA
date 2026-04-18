@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { AppState, Platform } from 'react-native';
 import 'react-native-url-polyfill/auto';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_API_URL 
     ? `${process.env.EXPO_PUBLIC_API_URL.trim().replace(/\/$/, '')}/supabase` 
@@ -16,12 +17,7 @@ const LargeSecureStore = {
             if (Platform.OS === 'web') {
                 return typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null;
             }
-            // Check if AsyncStorage is available and not null (legacy storage check)
-            const storage = require('@react-native-async-storage/async-storage').default;
-            if (storage) {
-                return await storage.getItem(key);
-            }
-            return MemoryStorage[key] || null;
+            return await AsyncStorage.getItem(key);
         } catch (e) {
             return MemoryStorage[key] || null;
         }
@@ -33,10 +29,7 @@ const LargeSecureStore = {
                 if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
                 return;
             }
-            const storage = require('@react-native-async-storage/async-storage').default;
-            if (storage) {
-                await storage.setItem(key, value);
-            }
+            await AsyncStorage.setItem(key, value);
         } catch (e) {
             // Silently fail as we have memory backup
         }
@@ -48,10 +41,7 @@ const LargeSecureStore = {
                 if (typeof localStorage !== 'undefined') localStorage.removeItem(key);
                 return;
             }
-            const storage = require('@react-native-async-storage/async-storage').default;
-            if (storage) {
-                await storage.removeItem(key);
-            }
+            await AsyncStorage.removeItem(key);
         } catch (e) {
             // Silently fail
         }

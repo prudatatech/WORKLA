@@ -1,7 +1,8 @@
 import { supabase } from './supabase';
 import { useResilienceStore } from './resilienceStore';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
+const rawApiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
+const API_URL = rawApiUrl.trim().replace(/\/$/, '');
 
 // ── Cached auth session to avoid getSession() on every request ──
 let _cachedToken: string | null = null;
