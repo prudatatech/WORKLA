@@ -106,13 +106,14 @@ export default async function payoutRoutes(fastifyInstance: FastifyInstance) {
                 .range(offset, offset + limit - 1);
 
             if (error) {
-                console.error('[PAYOUT ERROR]', error.message);
-                throw error;
+                console.error('[PAYOUT ERROR]', error);
+                return reply.code(400).send({ error: error.message, details: error.details, hint: error.hint });
             }
 
             return reply.send({ success: true, data });
-        } catch {
-            return reply.code(500).send({ error: 'Failed to fetch payout history.' });
+        } catch (err: any) {
+            console.error('[FATAL PAYOUT ERROR]', err);
+            return reply.code(500).send({ error: 'Internal Server Error', details: err.message });
         }
     });
 }
