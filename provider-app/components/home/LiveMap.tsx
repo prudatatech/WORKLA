@@ -1,5 +1,5 @@
 import { MapPin } from 'lucide-react-native';
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 
@@ -11,6 +11,26 @@ interface LiveMapProps {
 }
 
 const LiveMap = React.memo(({ currentLocation, currentCity }: LiveMapProps) => {
+  const mapRef = useRef<MapView>(null);
+  const initialRegionRef = useRef({
+    latitude: currentLocation.latitude,
+    longitude: currentLocation.longitude,
+    latitudeDelta: 0.05,
+    longitudeDelta: 0.05,
+  });
+
+  // Smoothly animate camera when location changes — never causes a remount
+  useEffect(() => {
+    if (mapRef.current) {
+      mapRef.current.animateToRegion({
+        latitude: currentLocation.latitude,
+        longitude: currentLocation.longitude,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
+      }, 800); // 800ms smooth animation
+    }
+  }, [currentLocation.latitude, currentLocation.longitude]);
+
   return (
     <View style={styles.mapCard}>
       <View style={styles.mapHeader}>
@@ -20,20 +40,15 @@ const LiveMap = React.memo(({ currentLocation, currentCity }: LiveMapProps) => {
       <Text style={styles.mapCity}>{currentCity}</Text>
       <View style={styles.mapAreaContainer}>
         <MapView
+          ref={mapRef}
           provider={PROVIDER_GOOGLE}
           style={styles.map}
-          initialRegion={{
-            latitude: currentLocation.latitude,
-            longitude: currentLocation.longitude,
-            latitudeDelta: 0.05,
-            longitudeDelta: 0.05,
-          }}
+          initialRegion={initialRegionRef.current}
           scrollEnabled={false}
           zoomEnabled={false}
           pitchEnabled={false}
           rotateEnabled={false}
           showsUserLocation={true}
-          followsUserLocation={true}
           showsMyLocationButton={false}
           showsPointsOfInterest={false}
           showsBuildings={false}
@@ -46,7 +61,7 @@ const LiveMap = React.memo(({ currentLocation, currentCity }: LiveMapProps) => {
     </View>
   );
 }, (prev, next) => {
-  // Only re-render if location changed significantly (> 0.0001 degrees)
+  // Only re-render if location changed significantly (> 0.0001 degrees) or city changed
   const latDiff = Math.abs(prev.currentLocation.latitude - next.currentLocation.latitude);
   const lngDiff = Math.abs(prev.currentLocation.longitude - next.currentLocation.longitude);
   return latDiff < 0.0001 && lngDiff < 0.0001 && prev.currentCity === next.currentCity;
@@ -64,3 +79,4 @@ const styles = StyleSheet.create({
   mapAreaContainer: { height: 160, borderRadius: 16, overflow: 'hidden', backgroundColor: '#F8FAFC' },
   map: { flex: 1 },
 });
+

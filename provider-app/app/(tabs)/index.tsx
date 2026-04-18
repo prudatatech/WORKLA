@@ -5,7 +5,7 @@ import { useAudioPlayer } from 'expo-audio';
 import { safeRequestPermissions, safeScheduleNotification, safeSetNotificationHandler, getPushTokenAsync, setupNotificationChannels } from '../../lib/notifications';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { AlertTriangle, ChevronRight, MapPin } from 'lucide-react-native';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Animated, AppState, AppStateStatus, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, Vibration, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ProviderHero from '../../components/home/ProviderHero';
@@ -234,6 +234,7 @@ export default function ProviderHomeScreen() {
   const loadStats = useCallback(async (force = false) => {
     // ── Instant: Show cached stats while refreshing in background ──
     const cached = await localCache.get<any>('provider:stats');
+    let hasDataToShow = false;
     if (cached) {
       setTodayEarnings(cached.todayEarnings || 0);
       setTodayJobs(cached.todayJobs || 0);
@@ -243,6 +244,7 @@ export default function ProviderHomeScreen() {
       if (cached.activeJob) setActiveJob(cached.activeJob);
       // isOnline is NOT read from stats cache — it has its own persistent key.
       setLoading(false); // Show content immediately from cache
+      hasDataToShow = true;
       if (!force) {
         // Still fetch live in background — do NOT return early.
         // The live fetch below will correct any stale verification_status.
@@ -253,7 +255,12 @@ export default function ProviderHomeScreen() {
     if (!user) return;
 
     try {
-      setLoading(true);
+      // 🛡️ Only show skeleton on the VERY FIRST load when there's no cached data.
+      // Never toggle loading during background refreshes — it unmounts the entire
+      // component tree (including MapView) causing the visible "reload" flicker.
+      if (!hasDataToShow) {
+        setLoading(true);
+      }
       const [providerRes, analyticsRes, activeJobRes] = await Promise.all([
         supabase
           .from('provider_details')
@@ -550,8 +557,15 @@ export default function ProviderHomeScreen() {
     setRefreshing(false);
   }, [loadStats]);
 
-
-
+  // 🛡️ Stable location reference — prevents LiveMap remount on every tick
+  // useMemo ensures the same object identity is passed unless coords actually change
+  const stableLocation = useMemo(() => {
+    if (!currentLocation) return null;
+    return { latitude: currentLocation.latitude, longitude: currentLocation.longitude };
+  }, [
+    currentLocation ? Math.round(currentLocation.latitude * 10000) : 0,
+    currentLocation ? Math.round(currentLocation.longitude * 10000) : 0,
+  ]);
 
 
 
@@ -717,7 +731,7 @@ export default function ProviderHomeScreen() {
                 </View>
             )}
 
-            {isOnline && currentLocation && !activeJob && <LiveMap currentLocation={currentLocation} currentCity={currentCity} />}
+            {isOnline && currentLocation && !activeJob && <LiveMap currentLocation={stableLocation} currentCity={currentCity} />}
 
             <WeeklyChart weeklyData={weeklyData} />
 

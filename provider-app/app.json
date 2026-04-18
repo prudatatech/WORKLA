@@ -10,10 +10,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "tech.prudata.provider"
     },
     "android": {
-      "package": "com.workla.provider",
+      "package": "tech.prudata.provider",
       "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#1A3FFF",
@@ -22,17 +23,6 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "permissions": [
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
-        "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_LOCATION",
-        "NOTIFICATIONS",
-        "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE",
-        "USE_FULL_SCREEN_INTENT",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
@@ -92,14 +82,14 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "175d1a69-af06-4a50-bc85-549d1eda6e03"
+        "projectId": "233e46f8-1afc-4432-9141-077b229f2292"
       }
     },
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/175d1a69-af06-4a50-bc85-549d1eda6e03"
+      "enabled": true
     }
   }
 }

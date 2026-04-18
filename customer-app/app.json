@@ -11,14 +11,14 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.workla.customer",
+      "bundleIdentifier": "tech.prudata.customer",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Workla needs your location to find nearby service providers.",
         "NSLocationAlwaysUsageDescription": "Workla uses your location to match you with nearby providers."
       }
     },
     "android": {
-      "package": "com.workla.customer",
+      "package": "tech.prudata.customer",
       "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#1A3FFF",
@@ -75,13 +75,15 @@
     },
     "extra": {
       "router": {},
-      "eas": {}
+      "eas": {
+        "projectId": "e484cfb4-baa5-4868-991d-25c8672e2f45"
+      }
     },
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/c567b52d-0d08-4b33-83ba-a58eb282f076"
+      "enabled": true
     }
   }
 }
