@@ -4,6 +4,7 @@ import { ArrowLeft, ChevronRight, HelpCircle, Mail, MessageSquare, Phone } from 
 import React, { useState } from 'react';
 import {
     Linking,
+    Platform,
     ScrollView,
     StatusBar,
     StyleSheet,
@@ -12,7 +13,6 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { initiateCall } from '../../lib/phone';
 
 const PRIMARY = '#1A3FFF';
 
@@ -45,7 +45,8 @@ export default function ProviderSupportScreen() {
 
     const handleCall = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        initiateCall('18001234567');
+        const url = Platform.OS === 'android' ? 'tel:18001234567' : 'telprompt:18001234567';
+        Linking.openURL(url).catch(err => console.error('Error opening dialer', err));
     };
 
     const handleEmail = () => {

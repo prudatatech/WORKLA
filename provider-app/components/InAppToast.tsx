@@ -22,43 +22,39 @@ export default function InAppToast({ visible, title, body, type = 'info', durati
     const opacity = useRef(new Animated.Value(0)).current;
     const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const onDismissRef = useRef(onDismiss);
-
-    useEffect(() => {
-        onDismissRef.current = onDismiss;
-    }, [onDismiss]);
-
-    const hideToast = useCallback((notifyParent = true) => {
+    const dismiss = useCallback(() => {
         Animated.parallel([
             Animated.timing(translateY, { toValue: -120, duration: 250, useNativeDriver: true }),
             Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-        ]).start(({ finished }) => {
-            if (finished && notifyParent) {
-                onDismissRef.current();
-            }
-        });
-    }, [opacity, translateY]);
+        ]).start(() => onDismiss());
+    }, [opacity, translateY, onDismiss]);
 
     useEffect(() => {
         if (visible) {
+            // Show animation
             Animated.parallel([
                 Animated.spring(translateY, { toValue: 0, useNativeDriver: true, tension: 80, friction: 12 }),
                 Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
             ]).start();
 
+            // Auto-dismiss timer
             if (timeoutRef.current) clearTimeout(timeoutRef.current);
             timeoutRef.current = setTimeout(() => {
-                hideToast(true);
+                dismiss();
             }, duration);
         } else {
-            // Parent turned visible to false or it's hiding. Just animate out, don't ping parent again.
-            hideToast(false);
+            // Only trigger dismiss (animation out) if we are currently visible/offset
+            // This prevents loops when RootLayout re-renders with visible: false
+            const currentVal = (translateY as any)._value;
+            if (currentVal >= 0 || (opacity as any)._value > 0) {
+              dismiss();
+            }
         }
 
         return () => {
             if (timeoutRef.current) clearTimeout(timeoutRef.current);
         };
-    }, [visible, duration, translateY, opacity, hideToast]);
+    }, [visible, duration, dismiss]);
 
     if (!visible && !title) return null;
 
@@ -75,7 +71,7 @@ export default function InAppToast({ visible, title, body, type = 'info', durati
             <TouchableOpacity
                 style={styles.inner}
                 activeOpacity={0.8}
-                onPress={() => hideToast(true)}
+                onPress={dismiss}
             >
                 <Text style={styles.icon}>{color.icon}</Text>
                 <View style={styles.textContainer}>

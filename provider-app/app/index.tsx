@@ -1,10 +1,11 @@
 import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
-import { Lock, LogIn, Mail, ArrowLeft } from 'lucide-react-native';
+import { CheckCircle2, Eye, EyeOff, Lock, LogIn, Mail, UserPlus, ArrowLeft } from 'lucide-react-native';
 import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
+import { formatPhone } from '../lib/format';
 
 const PRIMARY = '#1A3FFF';
 
@@ -194,7 +195,7 @@ export default function ProviderAuthScreen() {
                         ? 'Enter your mobile number to continue'
                         : mode === 'email'
                         ? 'Enter your email to continue'
-                        : `Enter the 6-digit code sent to +91 ${phone}`}
+                        : `Enter the 6-digit code sent to ${formatPhone(phone)}`}
                 </Text>
             </View>
 

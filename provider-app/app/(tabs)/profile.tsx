@@ -29,8 +29,8 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { formatIndianPhone } from '../../lib/phone';
 import { supabase } from '../../lib/supabase';
+import { formatPhone } from '../../lib/format';
 
 const PRIMARY = '#1A3FFF';
 
@@ -47,50 +47,22 @@ export default function ProviderProfileScreen() {
     const router = useRouter();
 
     const loadProfile = useCallback(async () => {
-        try {
-            console.log('[PROFILE DEBUG] Starting profile load...');
-            
-            // 🕒 5-second safety timeout for the entire sequence
-            const sessionPromise = supabase.auth.getSession();
-            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Profile Load Timeout')), 5000));
-            
-            const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
-            const user = session?.user;
-            
-            if (!user) {
-                console.warn('[PROFILE DEBUG] No session found');
-                return;
-            }
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
 
-            console.log('[SUPABASE DEBUG] Loading profile for:', user.id);
-            const [upRes, spRes] = await Promise.all([
-                supabase.from('profiles').select('*').eq('id', user.id).single(),
-                supabase.from('provider_details').select('*').eq('provider_id', user.id).single()
-            ]);
-            
-            if (upRes.error || spRes.error) {
-                console.error('[SUPABASE ERROR] Profiles:', upRes.error?.message, 'Details:', spRes.error?.message);
-            } else {
-                console.log('[SUPABASE SUCCESS] Profile data received');
-            }
-
-            setProfile(upRes.data);
-            setProvider(spRes.data);
-            setEditName(upRes.data?.full_name || '');
-            setEditBusiness(spRes.data?.business_name || '');
-        } catch (e: any) {
-            console.error('[PROFILE FATAL ERROR]:', e.message || e);
-        }
+        const { data: up } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        const { data: sp } = await supabase.from('provider_details').select('*').eq('provider_id', user.id).single();
+        setProfile(up);
+        setProvider(sp);
+        setEditName(up?.full_name || '');
+        setEditBusiness(sp?.business_name || '');
     }, []);
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
-        try {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            await loadProfile();
-        } finally {
-            setRefreshing(false);
-        }
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        await loadProfile();
+        setRefreshing(false);
     }, [loadProfile]);
 
     useEffect(() => { loadProfile(); }, [loadProfile]);
@@ -151,7 +123,7 @@ export default function ProviderProfileScreen() {
         {
             title: 'Preferences',
             items: [
-                { label: 'Phone Number', Icon: Phone, value: profile?.phone, onPress: () => { } },
+                { label: 'Phone Number', Icon: Phone, value: formatPhone(profile?.phone), onPress: () => { } },
             ],
         },
         {

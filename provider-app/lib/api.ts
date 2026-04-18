@@ -1,16 +1,12 @@
 import { supabase } from './supabase';
 import { useResilienceStore } from './resilienceStore';
 
-const rawApiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
-const API_URL = rawApiUrl.trim().replace(/\/$/, '');
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
 
 // ── Cached auth session to avoid getSession() on every request ──
 let _cachedToken: string | null = null;
 let _tokenExpiresAt = 0;
 let _tokenPromise: Promise<string | null> | null = null;
-
-// ── Simple Request Deduplication ──
-const _pendingRequests = new Map<string, Promise<any>>();
 
 async function getCachedToken(): Promise<string | null> {
     const now = Date.now();
@@ -20,17 +16,20 @@ async function getCachedToken(): Promise<string | null> {
 
     _tokenPromise = (async () => {
         try {
-            // 🕒 5-second timeout for session retrieval through proxy
-            const sessionPromise = supabase.auth.getSession();
-            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Auth Token Timeout')), 5000));
-            
-            const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
-            
+            const { data: { session }, error } = await supabase.auth.getSession();
+            if (error) {
+                console.warn('[API] Session retrieval error:', error.message);
+                // If the session is invalid, we don't want to crash. We'll return null and let the UI handle redirect
+                if (error.message?.includes('Refresh Token')) {
+                    await supabase.auth.signOut();
+                }
+                return null;
+            }
             _cachedToken = session?.access_token ?? null;
             _tokenExpiresAt = Date.now() + 4 * 60 * 1000; // cache for 4 minutes
             return _cachedToken;
-        } catch (e: any) {
-            console.error('[API AUTH ERROR]:', e.message || e);
+        } catch (e) {
+            console.error('[API] Unexpected auth error:', e);
             return null;
         } finally {
             _tokenPromise = null;
@@ -81,13 +80,6 @@ export async function apiRequest<T = any>(
 
         clearTimeout(timeoutId);
 
-        // 🔍 DEBUG: Inspect Proxy Response
-        console.log(`[PROXY DEBUG] ${path} -> Status: ${response.status}`);
-        if (response.status >= 400) {
-            const errText = await response.clone().text();
-            console.error(`[PROXY ERROR] Body: ${errText.substring(0, 200)}`);
-        }
-
         if (response.status === 204) return { data: null, error: null };
 
         let result;
@@ -136,16 +128,8 @@ export async function apiRequest<T = any>(
 }
 
 export const api = {
-    get: <T = any>(path: string, options?: RequestInit) => {
-        const key = `GET:${path}`;
-        if (_pendingRequests.has(key)) return _pendingRequests.get(key);
-
-        const promise = apiRequest<T>(path, { ...options, method: 'GET' })
-            .finally(() => _pendingRequests.delete(key));
-        
-        _pendingRequests.set(key, promise);
-        return promise;
-    },
+    get: <T = any>(path: string, options?: RequestInit) =>
+        apiRequest<T>(path, { ...options, method: 'GET' }),
 
     post: <T = any>(path: string, body: any, options?: RequestInit) =>
         apiRequest<T>(path, { ...options, method: 'POST', body: JSON.stringify(body) }),

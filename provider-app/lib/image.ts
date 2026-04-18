@@ -22,7 +22,6 @@ export async function pickAndCompressImage(
     const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
-        aspect: [1, 1], 
         quality: 1, 
     });
 

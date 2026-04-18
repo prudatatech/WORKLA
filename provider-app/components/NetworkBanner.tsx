@@ -63,7 +63,7 @@ export default function NetworkBanner() {
         } else if (isConnected !== false && visible) {
             hideBanner();
         }
-    }, [isRecovering, isConnected, showBanner, hideBanner, rotateAnim, visible]);
+    }, [isRecovering, isConnected, showBanner, hideBanner]);
 
     if (!visible && isConnected !== false && !isRecovering) return null;
 

@@ -29,7 +29,7 @@ const WalletEmptyImg = require('../../assets/images/wallet-empty.png');
 const PRIMARY = '#1A3FFF';
 const GREEN = '#059669';
 
-
+const PERIOD_TABS = ['Today', 'This Week', 'This Month', 'All'] as const;
 
 export default function EarningsScreen() {
     const [earnings, setEarnings] = useState<any[]>([]);
@@ -119,7 +119,7 @@ export default function EarningsScreen() {
                                 transferMethod: 'bank_transfer'
                             });
 
-                            if (!res.error) {
+                            if (res.success) {
                                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                                 Alert.alert('Request Sent', 'Your withdrawal request has been submitted for admin approval. Funds will be moved to escrow.');
                                 fetchFinancials(); // Refresh balance

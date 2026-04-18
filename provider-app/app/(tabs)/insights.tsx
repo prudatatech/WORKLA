@@ -27,7 +27,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { InsightsScorecardSkeleton, MetricCardSkeleton, SkeletonLoader } from '../../components/SkeletonLoader';
 import EmptyState from '../../components/EmptyState';
 import { api } from '../../lib/api';
-import { supabase } from '../../lib/supabase';
 
 const InsightsEmptyImg = require('../../assets/images/search-empty.png');
 
@@ -44,13 +43,6 @@ export default function InsightsScreen() {
     const fetchInsights = useCallback(async () => {
         setLoading(true);
         try {
-            // 🕒 5-second safety timeout for session check
-            const sessionPromise = supabase.auth.getSession();
-            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Auth Timeout')), 5000));
-            
-            await Promise.race([sessionPromise, timeoutPromise]);
-            
-            console.log('[INSIGHTS DEBUG] Fetching analytics...');
             const [statsRes, earningsRes] = await Promise.all([
                 api.get('/api/v1/providers/analytics'),
                 api.get(`/api/v1/providers/analytics/earnings?period=${period}`)
@@ -58,6 +50,8 @@ export default function InsightsScreen() {
 
             if (statsRes.data) {
                 setStats(statsRes.data);
+                
+                // Prepare weekly data for chart
                 const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
                 setChartData({
                     labels,
@@ -71,7 +65,7 @@ export default function InsightsScreen() {
                 setEarningsDetails(earningsRes.data);
             }
         } catch (e: any) {
-            console.error('[INSIGHTS ERROR]:', e.message || e);
+            console.error('Insights Error:', e);
         } finally {
             setLoading(false);
         }

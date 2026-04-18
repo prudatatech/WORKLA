@@ -1,7 +1,7 @@
 import { MapPin } from 'lucide-react-native';
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
 const PRIMARY = '#1A3FFF';
 
@@ -10,27 +10,7 @@ interface LiveMapProps {
   currentCity: string;
 }
 
-const LiveMap = React.memo(({ currentLocation, currentCity }: LiveMapProps) => {
-  const mapRef = useRef<MapView>(null);
-  const initialRegionRef = useRef({
-    latitude: currentLocation.latitude,
-    longitude: currentLocation.longitude,
-    latitudeDelta: 0.05,
-    longitudeDelta: 0.05,
-  });
-
-  // Smoothly animate camera when location changes — never causes a remount
-  useEffect(() => {
-    if (mapRef.current) {
-      mapRef.current.animateToRegion({
-        latitude: currentLocation.latitude,
-        longitude: currentLocation.longitude,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      }, 800); // 800ms smooth animation
-    }
-  }, [currentLocation.latitude, currentLocation.longitude]);
-
+export default function LiveMap({ currentLocation, currentCity }: LiveMapProps) {
   return (
     <View style={styles.mapCard}>
       <View style={styles.mapHeader}>
@@ -40,36 +20,22 @@ const LiveMap = React.memo(({ currentLocation, currentCity }: LiveMapProps) => {
       <Text style={styles.mapCity}>{currentCity}</Text>
       <View style={styles.mapAreaContainer}>
         <MapView
-          ref={mapRef}
           provider={PROVIDER_GOOGLE}
           style={styles.map}
-          initialRegion={initialRegionRef.current}
-          scrollEnabled={false}
-          zoomEnabled={false}
-          pitchEnabled={false}
-          rotateEnabled={false}
+          initialRegion={{
+            latitude: currentLocation.latitude,
+            longitude: currentLocation.longitude,
+            latitudeDelta: 0.05,
+            longitudeDelta: 0.05,
+          }}
           showsUserLocation={true}
-          showsMyLocationButton={false}
-          showsPointsOfInterest={false}
-          showsBuildings={false}
-          showsTraffic={false}
-          showsIndoors={false}
         >
-          {/* No redundant marker as showsUserLocation is active */}
+          <Marker coordinate={currentLocation} title="You" description={currentCity} />
         </MapView>
       </View>
     </View>
   );
-}, (prev, next) => {
-  // Only re-render if location changed significantly (> 0.0001 degrees) or city changed
-  const latDiff = Math.abs(prev.currentLocation.latitude - next.currentLocation.latitude);
-  const lngDiff = Math.abs(prev.currentLocation.longitude - next.currentLocation.longitude);
-  return latDiff < 0.0001 && lngDiff < 0.0001 && prev.currentCity === next.currentCity;
-});
-
-LiveMap.displayName = 'LiveMap';
-
-export default LiveMap;
+}
 
 const styles = StyleSheet.create({
   mapCard: { backgroundColor: '#FFF', borderRadius: 24, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: '#F3F4F6', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10 },
@@ -79,4 +45,3 @@ const styles = StyleSheet.create({
   mapAreaContainer: { height: 160, borderRadius: 16, overflow: 'hidden', backgroundColor: '#F8FAFC' },
   map: { flex: 1 },
 });
-

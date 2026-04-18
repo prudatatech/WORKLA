@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "provider-app",
-    "owner": "prudata.tech",
+    "owner": "kushagratiwari252",
     "slug": "provider-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,11 +10,10 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "tech.prudata.provider"
+      "supportsTablet": true
     },
     "android": {
-      "package": "tech.prudata.provider",
+      "package": "com.workla.provider",
       "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#1A3FFF",
@@ -27,13 +26,7 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_LOCATION",
-        "NOTIFICATIONS",
-        "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE",
-        "USE_FULL_SCREEN_INTENT",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "NOTIFICATIONS"
       ],
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -49,18 +42,6 @@
     },
     "plugins": [
       "expo-router",
-      "expo-av",
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/images/icon.png",
-          "color": "#1A3FFF",
-          "sounds": [
-            "./assets/sounds/job_alert.mp3"
-          ],
-          "androidMode": "default"
-        }
-      ],
       [
         "expo-splash-screen",
         {
@@ -72,8 +53,7 @@
             "backgroundColor": "#000000"
           }
         }
-      ],
-      "expo-audio"
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
@@ -81,15 +61,7 @@
     },
     "extra": {
       "router": {},
-      "eas": {
-        "projectId": "3b17fbe2-af0d-4629-890f-4a7258f62ee2"
-      }
-    },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "enabled": true
+      "eas": {}
     }
   }
 }

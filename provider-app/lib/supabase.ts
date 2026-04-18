@@ -1,9 +1,13 @@
-import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
 import { AppState, Platform } from 'react-native';
+import 'react-native-url-polyfill/auto';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() || '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() || '';
+
+if (!supabaseUrl || !supabaseAnonKey) {
+    console.error('❌ Supabase Configuration Missing: Check your .env file');
+}
 
 // Memory-only storage fallback for when AsyncStorage fails
 const MemoryStorage: Record<string, string> = {};
@@ -63,11 +67,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
         persistSession: true,
         detectSessionInUrl: false,
     },
-    realtime: {
-        params: {
-            eventsPerSecond: 10,
-        },
-    },
 });
 
 AppState.addEventListener('change', (state) => {
@@ -75,5 +74,23 @@ AppState.addEventListener('change', (state) => {
         supabase.auth.startAutoRefresh();
     } else {
         supabase.auth.stopAutoRefresh();
+    }
+});
+
+// 🛡️ Global Auth Error Listener to prevent "Refresh Token Not Found" loops
+supabase.auth.onAuthStateChange(async (event, session) => {
+    console.log(`[AUTH EVENT] ${event}`, session ? 'Session Active' : 'No Session');
+    
+    if (event === 'TOKEN_REFRESHED') {
+        console.log('✅ Token successfully refreshed');
+    }
+
+    if (event === 'SIGNED_OUT') {
+        // Clear anything that might be stuck in storage
+        try {
+            await LargeSecureStore.removeItem('supabase.auth.token');
+        } catch (e) {
+            console.error('Failed to clear stale auth token:', e);
+        }
     }
 });

@@ -1,24 +1,22 @@
 import * as Haptics from 'expo-haptics';
-import * as TaskManager from 'expo-task-manager';
 import * as Location from 'expo-location';
-import { useAudioPlayer } from 'expo-audio';
-import { safeRequestPermissions, safeScheduleNotification, safeSetNotificationHandler, getPushTokenAsync, setupNotificationChannels } from '../../lib/notifications';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { AlertTriangle, ChevronRight, MapPin } from 'lucide-react-native';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Animated, AppState, AppStateStatus, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, Vibration, View } from 'react-native';
+import * as TaskManager from 'expo-task-manager';
+import { AlertTriangle, ChevronRight } from 'lucide-react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Animated, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, Vibration, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ProviderHero from '../../components/home/ProviderHero';
 import StatsRow from '../../components/home/StatsRow';
 import WeeklyChart from '../../components/home/WeeklyChart';
 import LiveMap from '../../components/home/LiveMap';
 import IncomingJobModal from '../../components/home/IncomingJobModal';
-import VerificationSuccessModal from '../../components/VerificationSuccessModal';
 import { StatCardSkeleton, EarningRowSkeleton } from '../../components/SkeletonLoader';
+import { Clock, MapPin } from 'lucide-react-native';
 import { api } from '../../lib/api';
 import { localCache } from '../../lib/localCache';
-import { socketService } from '../../lib/socket';
 import { supabase } from '../../lib/supabase';
+import { registerForPushNotificationsAsync } from '../../lib/notifications';
 
 const PRIMARY = '#1A3FFF';
 const ONLINE_COLOR = '#059669';
@@ -57,7 +55,6 @@ export default function ProviderHomeScreen() {
   const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [currentCity, setCurrentCity] = useState<string>('Detecting location...');
   const [activeJob, setActiveJob] = useState<any>(null);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const router = useRouter();
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -66,33 +63,6 @@ export default function ProviderHomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
-  const player = useAudioPlayer(require('../../assets/sounds/job_alert.mp3')); // expo-audio player
-  const jobCancelSubRef = useRef<any>(null);
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-  // 🔒 Stable refs to break callback dependency chains
-  const loadStatsRef = useRef<() => Promise<void>>(() => Promise.resolve());
-  const subscribeRef = useRef<() => Promise<(() => void)>>(() => Promise.resolve(() => {}));
-  const hasMountedRef = useRef(false);
-
-  // ⚡ Default to ALWAYS ON. Only turn off if the user explicitly clicked the toggle (cached === false).
-  // Also auto-reconnect to backend and resume background tracking on open.
-  useEffect(() => {
-    localCache.get<boolean>('provider:isOnline').then(async cached => {
-      if (cached !== false) {
-        setIsOnline(true);
-        // Auto-restore online status to backend (in case server lost it)
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            await api.patch('/api/v1/providers/online', { is_online: true });
-            startLocationTracking(user.id);
-          }
-        } catch { /* silent — loadStats will retry */ }
-      } else {
-        setIsOnline(false);
-      }
-    });
-  }, []);
 
   useEffect(() => {
     if (isOnline) {
@@ -113,226 +83,101 @@ export default function ProviderHomeScreen() {
 
   const startLocationTracking = async (userId: string) => {
     try {
-      // 🛡️ Cleanup existing listener first to prevent leaks
-      if (locationSubRef.current) {
-        locationSubRef.current.remove();
-        locationSubRef.current = null;
-      }
-
       const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
       if (fgStatus !== 'granted') { setCurrentCity('Permission Denied'); return; }
       await Location.requestBackgroundPermissionsAsync();
 
-      // ⚡ Get fresh location immediately
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      const { latitude, longitude } = loc.coords;
-      
-      setCurrentLocation({ latitude, longitude });
-      api.post('/api/v1/providers/location', { latitude, longitude });
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setCurrentLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+      await api.post('/api/v1/providers/location', { latitude: loc.coords.latitude, longitude: loc.coords.longitude });
 
-      const [address] = await Location.reverseGeocodeAsync({ latitude, longitude });
-      if (address) {
-        const cityStr = address.city || address.subregion || address.district || 'Location Set';
-        setCurrentCity(cityStr);
-        localCache.set('provider:location', { latitude, longitude, city: cityStr }, 86400);
-      }
+      const [address] = await Location.reverseGeocodeAsync({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+      if (address) setCurrentCity(address.city || address.subregion || address.district || 'Location Set');
 
-      // 📶 High-frequency background updates
       await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-        accuracy: Location.Accuracy.High,
-        timeInterval: 30000,
-        distanceInterval: 10,
+        accuracy: Location.Accuracy.Balanced, timeInterval: 60000, distanceInterval: 50,
         foregroundService: { notificationTitle: "Workla Provider Online", notificationBody: "Your location is being shared with customers", notificationColor: PRIMARY },
       });
 
-      // 🔄 Foreground watch: fast updates while screen is on
-      const lastUpdateRef = { time: 0, lat: latitude, lng: longitude };
-      
       locationSubRef.current = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.High, distanceInterval: 10 },
+        { accuracy: Location.Accuracy.Balanced, distanceInterval: 50 },
         (locUpdate) => {
-          const lat = locUpdate.coords.latitude;
-          const lng = locUpdate.coords.longitude;
-          const now = Date.now();
-          
-          // 🛡️ Throttle: 10 meters OR 10 seconds
-          const dist = Math.sqrt(Math.pow(lat - lastUpdateRef.lat, 2) + Math.pow(lng - lastUpdateRef.lng, 2));
-          if (dist < 0.0001 && (now - lastUpdateRef.time) < 10000) return;
-          
-          lastUpdateRef.time = now;
-          lastUpdateRef.lat = lat;
-          lastUpdateRef.lng = lng;
-
-          setCurrentLocation({ latitude: lat, longitude: lng });
-          api.post('/api/v1/providers/location', { latitude: lat, longitude: lng });
+          setCurrentLocation({ latitude: locUpdate.coords.latitude, longitude: locUpdate.coords.longitude });
+          api.post('/api/v1/providers/location', { latitude: locUpdate.coords.latitude, longitude: locUpdate.coords.longitude });
         }
       );
-    } catch (e) {
-      console.error('Failed to start location tracking:', e);
-    }
+    } catch { }
   };
 
-  useEffect(() => {
-    // ⚡ Instant load location from cache to avoid UI pop-in
-    localCache.get<any>('provider:location').then(cachedLoc => {
-      if (cachedLoc) {
-        setCurrentCity(cachedLoc.city || '');
-        if (cachedLoc.latitude && cachedLoc.longitude) {
-          setCurrentLocation({ latitude: cachedLoc.latitude, longitude: cachedLoc.longitude });
-        }
-      }
-    });
-
-    // Request notification permissions
-    (async () => {
-      const { status } = await safeRequestPermissions();
-      if (status !== 'granted' && status !== 'denied') {
-          console.warn('Notification permissions not granted or failed');
-      }
-    })();
-
-    // 🔔 Setup high-priority notification channels (job-alerts bypasses DnD)
-    setupNotificationChannels();
-
-    // Configure notification behavior
-    safeSetNotificationHandler({
-        handleNotification: async () => ({
-            shouldShowAlert: true,
-            shouldPlaySound: true,
-            shouldSetBadge: false,
-        }),
-    });
-
-    // 🚀 Register for Remote Push Notifications (Always On Support)
-    (async () => {
-        const token = await getPushTokenAsync();
-        if (token) {
-            try {
-                await api.patch('/api/v1/users/push-token', { token });
-                console.warn('[Sync] Push token registered with backend');
-            } catch (err) {
-                console.error('[Sync] Failed to register push token:', err);
-            }
-        }
-    })();
-
-    // 🔄 AppState listener: auto-refresh location + stats when app comes to foreground
-    const subscription = AppState.addEventListener('change', async (nextState: AppStateStatus) => {
-        if (appStateRef.current.match(/inactive|background/) && nextState === 'active') {
-            console.warn('[App] Foregrounded — syncing location & stats');
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) startLocationTracking(user.id);
-            loadStatsRef.current(); // Use ref to avoid stale closure
-        }
-        appStateRef.current = nextState;
-    });
-
-    return () => subscription.remove();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const loadStats = useCallback(async (force = false) => {
-    // ── Instant: Show cached stats while refreshing in background ──
+  const loadStats = useCallback(async () => {
+    // ── Instant: Show cached stats while refreshing ──
     const cached = await localCache.get<any>('provider:stats');
-    let hasDataToShow = false;
     if (cached) {
       setTodayEarnings(cached.todayEarnings || 0);
       setTodayJobs(cached.todayJobs || 0);
       setRating(cached.rating || 0);
       setWeeklyData(cached.weeklyData || [0,0,0,0,0,0,0]);
       setProviderName(cached.providerName || 'Provider');
-      if (cached.activeJob) setActiveJob(cached.activeJob);
-      // isOnline is NOT read from stats cache — it has its own persistent key.
+      if (cached.isOnline !== undefined) setIsOnline(cached.isOnline);
       setLoading(false); // Show content immediately from cache
-      hasDataToShow = true;
-      if (!force) {
-        // Still fetch live in background — do NOT return early.
-        // The live fetch below will correct any stale verification_status.
-      }
     }
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    const { data: sp } = await supabase.from('provider_details').select('is_online, avg_rating, business_name').eq('provider_id', user.id).maybeSingle();
+    if (sp) {
+      setIsOnline(sp.is_online ?? false);
+      setRating(sp.avg_rating ?? 0);
+      setProviderName(sp.business_name ?? 'Provider');
+      if (sp.is_online) startLocationTracking(user.id);
+    }
+
+    const { data: docs } = await supabase.from('provider_documents').select('id, verified_status').eq('provider_id', user.id);
+    const hasDocuments = docs && docs.length > 0;
+    const allVerified = hasDocuments && docs.every(d => d.verified_status === 'verified');
+    const hasPending = hasDocuments && docs.some(d => d.verified_status === 'pending');
+    
+    const { data: bank } = await supabase.from('provider_bank_accounts').select('id').eq('provider_id', user.id).maybeSingle();
+    
+    // If documents are pending review, we'll store that state to change UI color
+    const isUnderReview = hasPending && !allVerified;
+    
+    if (!hasDocuments && !bank) setIncompleteProfile({ type: 'both', underReview: isUnderReview });
+    else if (!hasDocuments) setIncompleteProfile({ type: 'kyc', underReview: isUnderReview });
+    else if (!bank) setIncompleteProfile({ type: 'bank', underReview: isUnderReview });
+    else if (!allVerified) setIncompleteProfile({ type: 'kyc', underReview: isUnderReview }); // Still show if not fully verified but maybe not red
+    else setIncompleteProfile(null);
+
     try {
-      if (!hasDataToShow) {
-        setLoading(true);
-      }
-      console.log('[DASHBOARD DEBUG] Fetching stats...');
-      // 🛡️ 5-second safety timeout for auth + initial parallel batch
-      const sessionPromise = supabase.auth.getSession();
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Stats Timeout')), 5000));
-      
-      await Promise.race([sessionPromise, timeoutPromise]);
+      const res = await api.get('/api/v1/providers/analytics');
+      if (res.data) {
+        setTodayEarnings(res.data.todayEarnings || 0);
+        setTodayJobs(res.data.todayJobs || 0);
+        setWeeklyData(res.data.weeklyData || [0, 0, 0, 0, 0, 0, 0]);
+        if (res.data.rating) setRating(res.data.rating);
 
-      const [providerRes, analyticsRes, activeJobRes] = await Promise.all([
-        supabase
-          .from('provider_details')
-          .select(`
-            is_online, 
-            avg_rating, 
-            business_name, 
-            verification_status,
-            provider_documents(id),
-            provider_bank_accounts(id)
-          `)
-          .eq('provider_id', user.id)
-          .maybeSingle(),
-        api.get('/api/v1/providers/analytics'),
-        api.get('/api/v1/bookings?role=provider&status=confirmed,en_route,arrived,in_progress')
-      ]);
-
-      if (providerRes.data) {
-        const sp = providerRes.data;
-        // Do NOT overwrite local isOnline state! It causes false "offline" flips during background syncs.
-        setRating(sp.avg_rating ?? 0);
-        setProviderName(sp.business_name ?? 'Provider');
-        
-        const hasDocs = sp.provider_documents && sp.provider_documents.length > 0;
-        const hasBank = sp.provider_bank_accounts && sp.provider_bank_accounts.length > 0;
-        const isUnderReviewOrVerified = sp.verification_status === 'pending' || sp.verification_status === 'verified';
-
-        if (isUnderReviewOrVerified) {
-          setIncompleteProfile(null);
-        } else if (!hasDocs && !hasBank) {
-          setIncompleteProfile({ type: 'both' });
-        } else if (!hasDocs) {
-          setIncompleteProfile({ type: 'kyc' });
-        } else if (!hasBank) {
-          setIncompleteProfile({ type: 'bank' });
-        } else {
-          setIncompleteProfile(null);
-        }
-
-        const currentCache = await localCache.get<any>('provider:stats') || {};
-        localCache.set('provider:stats', { ...currentCache, verificationStatus: sp.verification_status }, 60);
-      }
-
-      let currentActiveJob = null;
-      if (activeJobRes.data && activeJobRes.data.length > 0) {
-        currentActiveJob = activeJobRes.data[0];
-        setActiveJob(currentActiveJob);
-      } else {
-        setActiveJob(null);
-      }
-
-      if (analyticsRes.data) {
-        const d = analyticsRes.data;
-        setTodayEarnings(d.todayEarnings || 0);
-        setTodayJobs(d.todayJobs || 0);
-        setWeeklyData(d.weeklyData || [0, 0, 0, 0, 0, 0, 0]);
-        if (d.rating) setRating(d.rating);
-
+        // Cache the stats for instant loading next time
         localCache.set('provider:stats', {
-          todayEarnings: d.todayEarnings || 0,
-          todayJobs: d.todayJobs || 0,
-          rating: d.rating || providerRes.data?.avg_rating || 0,
-          weeklyData: d.weeklyData || [0,0,0,0,0,0,0],
-          providerName: providerRes.data?.business_name || 'Provider',
-          verificationStatus: providerRes.data?.verification_status || 'unverified',
-          activeJob: currentActiveJob
-        }, 300); // 5min TTL for analytics
+          todayEarnings: res.data.todayEarnings || 0,
+          todayJobs: res.data.todayJobs || 0,
+          rating: res.data.rating || sp?.avg_rating || 0,
+          weeklyData: res.data.weeklyData || [0,0,0,0,0,0,0],
+          providerName: sp?.business_name || 'Provider',
+          isOnline: sp?.is_online ?? false,
+        }, 300); // 5-min TTL
       }
+
+      // Fetch active job for UI
+      try {
+          const activeRes = await api.get('/api/v1/bookings?role=provider&status=confirmed,en_route,arrived,in_progress');
+          if (activeRes.data && activeRes.data.length > 0) {
+              setActiveJob(activeRes.data[0]);
+          } else {
+              setActiveJob(null);
+          }
+      } catch (err) { console.error('Failed to fetch active job', err); }
+
     } catch (error) {
       console.error('Error fetching analytics:', error);
     } finally {
@@ -340,42 +185,16 @@ export default function ProviderHomeScreen() {
     }
   }, []);
 
-  // 🔒 Keep loadStatsRef in sync on every render so refs always call the latest version
-  loadStatsRef.current = loadStats;
-
-  // 🔔 Sound helper: play looping ringtone (expo-audio)
-  const playJobAlertSound = useCallback(async () => {
-    try {
-      player.loop = true;
-      player.volume = 1.0;
-      player.play();
-    } catch (e) {
-      console.warn('[Sound] Failed to play job alert sound:', e);
-    }
-  }, [player]);
-
-  const stopJobAlertSound = useCallback(async () => {
-    try {
-      player.pause();
-      player.seekTo(0);
-    } catch { }
-  }, [player]);
-
   const handleReject = useCallback(async (offerId: string) => {
-    stopJobAlertSound();
     if (countdownRef.current) clearInterval(countdownRef.current);
-    // Remove booking cancellation listener
-    if (jobCancelSubRef.current) { supabase.removeChannel(jobCancelSubRef.current); jobCancelSubRef.current = null; }
     Animated.timing(slideAnim, { toValue: 500, duration: 300, useNativeDriver: true }).start(() => setIncomingJob(null));
     await supabase.from('job_offers').update({ status: 'rejected' }).eq('id', offerId);
-  }, [slideAnim, stopJobAlertSound]);
+  }, [slideAnim]);
 
   const handleAccept = useCallback(async (offerId: string) => {
     // 🚀 Optimistic UI: Dismiss modal INSTANTLY with success feedback
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    stopJobAlertSound();
     if (countdownRef.current) clearInterval(countdownRef.current);
-    if (jobCancelSubRef.current) { supabase.removeChannel(jobCancelSubRef.current); jobCancelSubRef.current = null; }
     Animated.timing(slideAnim, { toValue: 500, duration: 300, useNativeDriver: true }).start(() => setIncomingJob(null));
     
     // API call runs in background while user already sees success
@@ -396,226 +215,87 @@ export default function ProviderHomeScreen() {
         const msg = e.response?.data?.error || e.response?.data?.message || e.message;
         Alert.alert('Error', msg || 'Failed to accept job'); 
     }
-  }, [slideAnim, loadStats, stopJobAlertSound, router]);
+  }, [slideAnim, loadStats]);
 
   const showIncomingJob = useCallback(async (offer: any) => {
-    let bookingData: any = null;
-    try {
-      const { data: booking, error } = await supabase
-        .from('bookings')
-        .select('*, service_subcategories(name), profiles!bookings_customer_id_fkey(full_name)')
-        .eq('id', offer.booking_id)
-        .single();
-      
-      if (error) throw error;
-      bookingData = booking;
-    } catch (err) {
-      console.warn('Failed to fetch booking details for popup, using fallback labels:', err);
-    }
-
+    const { data: booking } = await supabase.from('bookings').select('*, service_subcategories(name), profiles!bookings_customer_id_fkey(full_name)').eq('id', offer.booking_id).single();
+    if (!booking) return;
     setIncomingJob({
-      offerId: offer.id, 
-      bookingId: offer.booking_id,
-      service: bookingData?.service_subcategories?.name ?? 'New Work Request',
-      address: bookingData?.customer_address ?? 'Tap to see location',
+      offerId: offer.id, bookingId: offer.booking_id,
+      service: booking.service_subcategories?.name ?? 'Service',
+      address: booking.customer_address ?? 'Address not set',
       distance: offer.distance_km ? `${offer.distance_km.toFixed(1)} km away` : 'Nearby',
-      estimatedPrice: bookingData?.total_amount ?? 0,
-      customerName: (bookingData?.profiles as any)?.full_name ?? 'Customer',
-      scheduledDate: bookingData?.scheduled_date ?? '', 
-      timeSlot: bookingData?.scheduled_time_slot ?? '',
+      estimatedPrice: booking.total_amount ?? 0,
+      customerName: (booking.profiles as any)?.full_name ?? 'Customer',
+      scheduledDate: booking.scheduled_date ?? '', timeSlot: booking.scheduled_time_slot ?? '',
     });
     setCountdown(30);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     Vibration.vibrate([0, 500, 200, 500]);
-    playJobAlertSound(); // 🔔 Start ringing
     Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, bounciness: 8 }).start();
     if (countdownRef.current) clearInterval(countdownRef.current);
     countdownRef.current = setInterval(() => {
-      setCountdown(prev => { 
-        if (prev <= 1) { 
-          clearInterval(countdownRef.current!); 
-          stopJobAlertSound(); // Stop ringing on timeout
-          handleReject(offer.id); 
-          return 0; 
-        } 
-        return prev - 1; 
-      });
+      setCountdown(prev => { if (prev <= 1) { clearInterval(countdownRef.current!); handleReject(offer.id); return 0; } return prev - 1; });
     }, 1000);
-
-    // 📶 Listen for customer cancellation: if booking is cancelled, dismiss modal
-    if (jobCancelSubRef.current) supabase.removeChannel(jobCancelSubRef.current);
-    const channel = supabase.channel(`booking-cancel-${offer.booking_id}`)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'bookings',
-        filter: `id=eq.${offer.booking_id}`,
-      }, (payload) => {
-        const newStatus = (payload.new as any).status;
-        if (newStatus === 'cancelled') {
-          // Customer cancelled — dismiss modal silently
-          stopJobAlertSound();
-          if (countdownRef.current) clearInterval(countdownRef.current);
-          Animated.timing(slideAnim, { toValue: 500, duration: 300, useNativeDriver: true }).start(() => setIncomingJob(null));
-          supabase.removeChannel(channel);
-          jobCancelSubRef.current = null;
-        }
-      })
-      .subscribe();
-    jobCancelSubRef.current = channel;
-  }, [slideAnim, handleReject, playJobAlertSound, stopJobAlertSound]);
+  }, [slideAnim, handleReject]);
 
   const subscribeToOffers = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return () => {};
-
-    const channels: any[] = [];
-
-    // 1. Listen for Job Offers via Supabase Realtime
-    const offerChannel = supabase.channel(`provider-offers-${user.id}`).on('postgres_changes', {
+    if (!user) return;
+    supabase.channel('provider-offers').on('postgres_changes', {
       event: 'INSERT', schema: 'public', table: 'job_offers', filter: `provider_id=eq.${user.id}`,
     }, (payload) => {
       const offer = payload.new as any;
       if (offer.status === 'pending') showIncomingJob(offer);
     }).subscribe();
-    channels.push(offerChannel);
+  }, [showIncomingJob]);
 
-    // 2. High-speed WebSocket backup for instant popups
-    let socket: any = null;
-    socketService.getSocket().then(s => {
-      socket = s;
-      socket.on('job:new_offer', (data: any) => {
-        if (data.offer) showIncomingJob(data.offer);
-      });
-    }).catch(err => console.warn('Socket connection failed, relying on Realtime backup'));
+  useEffect(() => { 
+    loadStats(); 
+    subscribeToOffers(); 
+    
+    // Register for push notifications for "Always On" reliability
+    registerForPushNotificationsAsync();
+  }, [loadStats, subscribeToOffers]);
 
-    // 3. Listen for Verification Status Changes
-    const verifyChannel = supabase.channel(`verification-status-${user.id}`).on('postgres_changes', {
-        event: 'UPDATE', 
-        schema: 'public', 
-        table: 'provider_details', 
-        filter: `provider_id=eq.${user.id}`
-    }, (payload) => {
-        const oldStatus = (payload.old as any)?.verification_status;
-        const newStatus = (payload.new as any).verification_status;
-
-        if (oldStatus !== 'verified' && newStatus === 'verified') {
-            setShowSuccessModal(true);
-            localCache.get<any>('provider:stats').then(cached => {
-                if (cached) {
-                    localCache.set('provider:stats', { ...cached, verificationStatus: 'verified' }, 300);
-                }
-            });
-            loadStats();
-            safeScheduleNotification({
-                content: {
-                    title: "Status Approved! 🎉",
-                    body: "Your Workla profile is verified. You can now go online to take jobs!",
-                    sound: true,
-                },
-                trigger: null,
-            });
-        }
-    }).subscribe();
-    channels.push(verifyChannel);
-
-    return () => {
-      channels.forEach(ch => supabase.removeChannel(ch));
-      if (socket) socket.off('job:new_offer');
-    };
-  }, [showIncomingJob, loadStats]);
-
-  // Keep subscribeRef in sync
-  subscribeRef.current = subscribeToOffers;
-
-  // 🔑 Single mount effect — runs ONCE. Uses refs to avoid dependency chain re-renders.
-  useEffect(() => {
-    if (hasMountedRef.current) return;
-    hasMountedRef.current = true;
-
-    loadStatsRef.current();
-    let cleanup: (() => void) | null = null;
-    subscribeRef.current().then(c => { cleanup = c; });
-    return () => { if (cleanup) cleanup(); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // 🧠 Throttled focus refresh — only reload if >30s since last load
-  const lastLoadTimeRef = useRef(0);
+  // Silent refresh when tab is re-focused (e.g. after accepting a job)
   useFocusEffect(
     useCallback(() => {
-      const now = Date.now();
-      if (now - lastLoadTimeRef.current > 30000) {
-        lastLoadTimeRef.current = now;
-        loadStatsRef.current();
-      }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
+      loadStats();
+    }, [loadStats])
   );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    lastLoadTimeRef.current = Date.now();
     await loadStats();
     setRefreshing(false);
   }, [loadStats]);
 
-  // 🛡️ Stable location reference — prevents LiveMap remount on every tick
-  // useMemo ensures the same object identity is passed unless coords actually change
-  const stableLocation = useMemo(() => {
-    if (!currentLocation) return null;
-    return { latitude: currentLocation.latitude, longitude: currentLocation.longitude };
-  }, [
-    currentLocation ? Math.round(currentLocation.latitude * 10000) : 0,
-    currentLocation ? Math.round(currentLocation.longitude * 10000) : 0,
-  ]);
+
+
+
 
 
 
   const toggleOnline = async () => {
-    if (toggling) return;
+    if (toggling) return; // prevent double-tap
+    
+    // 🛡️ KYC CHECK: Block going online if KYC is incomplete
+    if (!isOnline && (incompleteProfile?.type === 'kyc' || incompleteProfile?.type === 'both')) {
+        Alert.alert(
+            'Action Required 🛡️',
+            'Please complete your identity verification (Aadhaar/PAN) before going online.',
+            [
+                { text: 'Later', style: 'cancel' },
+                { text: 'Complete KYC', onPress: () => router.push('/onboarding' as any) }
+            ]
+        );
+        return;
+    }
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setToggling(true);
-
-    // ── Optimized: Silent fresh check if cache says unverified ──
-    let status = (await localCache.get<any>('provider:stats'))?.verificationStatus;
-    
-    if (status === 'unverified' || !status) {
-        // Force a fresh check from server to bypass stale 5-min cache
-        const { data: userData } = await supabase.auth.getUser();
-        if (userData.user) {
-            const { data: sp } = await supabase.from('provider_details').select('verification_status').eq('provider_id', userData.user.id).single();
-            status = sp?.verification_status;
-            // Update cache immediately if it was stale
-            if (status) {
-                const cur = await localCache.get<any>('provider:stats') || {};
-                localCache.set('provider:stats', { ...cur, verificationStatus: status }, 300);
-            }
-        }
-    }
-
-    if (status === 'unverified') {
-        Alert.alert('Action Required', 'Please complete your KYC and bank details to go online.', [
-            { text: 'Cancel', style: 'cancel', onPress: () => setToggling(false) },
-            { text: 'Complete KYC', onPress: () => { setToggling(false); router.push('/kyc' as any); } }
-        ]);
-        return;
-    }
-
-    if (status === 'pending') {
-        Alert.alert('Under Review', 'Your KYC documents are currently being reviewed by our Admin team. You will be able to go online once approved.');
-        setToggling(false);
-        return;
-    }
-
-    if (status === 'rejected' || status === 'suspended' || status === 'reverify') {
-        Alert.alert('Action Required', 'Your profile is currently suspended or rejected. Please contact support.');
-        setToggling(false);
-        return;
-    }
-
     const newVal = !isOnline;
 
     // ⚡ Optimistic: flip toggle INSTANTLY — feels responsive on first press
@@ -628,14 +308,11 @@ export default function ProviderHomeScreen() {
       const res = await api.patch('/api/v1/providers/online', { is_online: newVal });
       if (!res.data?.success) {
         setIsOnline(!newVal); // rollback on failure
-        throw new Error('Failed to update status. Please try again.');
+        throw new Error(res.data?.error || 'Failed to update status. Please try again.');
       }
 
-      // ✅ Persist new status permanently so next cold-start shows correct state
-      await localCache.set('provider:isOnline', newVal, 86400); // 24h TTL
-
       if (newVal) startLocationTracking(user.id); else stopLocationTracking();
-    } catch (e: any) { Alert.alert('Error', e.message); }
+    } catch (e: any) { Alert.alert('Status Error', e.message); }
     finally { setToggling(false); }
   };
 
@@ -667,19 +344,22 @@ export default function ProviderHomeScreen() {
           </View>
         ) : (
           <View>
-            <VerificationSuccessModal 
-                visible={showSuccessModal} 
-                onClose={() => setShowSuccessModal(false)} 
-            />
             <StatsRow todayEarnings={todayEarnings} todayJobs={todayJobs} rating={rating} />
 
-            {incompleteProfile && (
-              <TouchableOpacity style={styles.kycCard} onPress={() => router.push('/kyc' as any)} activeOpacity={0.9}>
-                <View style={styles.kycIconWrap}><AlertTriangle size={20} color="#FFF" /></View>
+            {!isOnline && incompleteProfile && (
+              <TouchableOpacity 
+                style={[styles.kycCard, (incompleteProfile as any).underReview && { backgroundColor: '#3B82F6', shadowColor: '#3B82F6' }]} 
+                onPress={() => router.push('/onboarding' as any)} 
+                activeOpacity={0.9}
+              >
+                <View style={styles.kycIconWrap}>
+                    {(incompleteProfile as any).underReview ? <Clock size={20} color="#FFF" /> : <AlertTriangle size={20} color="#FFF" />}
+                </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.kycTitle}>Action Required</Text>
+                  <Text style={styles.kycTitle}>{(incompleteProfile as any).underReview ? 'Verification Under Review' : 'Action Required'}</Text>
                   <Text style={styles.kycSub}>
-                    {incompleteProfile.type === 'both' ? 'Complete KYC & add bank details' :
+                    {(incompleteProfile as any).underReview ? 'Our team is reviewing your documents. This takes 24-48h.' :
+                      incompleteProfile.type === 'both' ? 'Complete KYC & add bank details' :
                       incompleteProfile.type === 'kyc' ? 'Upload identity documents (Aadhaar)' : 'Add your bank account for payouts'}
                   </Text>
                 </View>
@@ -735,7 +415,7 @@ export default function ProviderHomeScreen() {
                 </View>
             )}
 
-            {isOnline && currentLocation && !activeJob && <LiveMap currentLocation={stableLocation} currentCity={currentCity} />}
+            {isOnline && currentLocation && !activeJob && <LiveMap currentLocation={currentLocation} currentCity={currentCity} />}
 
             <WeeklyChart weeklyData={weeklyData} />
 
@@ -807,5 +487,4 @@ const styles = StyleSheet.create({
   locationText: { fontSize: 15, fontWeight: '700', color: '#111827' },
   syncBtn: { backgroundColor: '#F3F4F6', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12 },
   syncBtnText: { color: PRIMARY, fontSize: 13, fontWeight: '700' },
-  activeJobWidget: {},
 });

@@ -4,8 +4,8 @@ import {
   Navigation2, Phone, Play, Wrench, XCircle
 } from 'lucide-react-native';
 import React from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { formatIndianPhone, initiateCall } from '../../lib/phone';
+import { ActivityIndicator, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { formatPhone } from '../../lib/format';
 
 const PRIMARY = '#1A3FFF';
 
@@ -54,11 +54,11 @@ export default function JobCard({ item, actionLoading, confirmJobId, onAdvance, 
           </View>
           <View>
             <Text style={styles.customerName}>{customer?.full_name || 'Customer'}</Text>
-            <Text style={styles.customerPhone}>{formatIndianPhone(customer?.phone) || 'No phone'}</Text>
+            <Text style={styles.customerPhone}>{formatPhone(customer?.phone)}</Text>
           </View>
         </View>
         <View style={styles.contactActions}>
-          <TouchableOpacity style={styles.contactBtn} onPress={() => initiateCall(customer?.phone)}>
+          <TouchableOpacity style={styles.contactBtn} onPress={() => Linking.openURL(`tel:${customer?.phone}`)}>
             <Phone size={16} color={PRIMARY} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.contactBtn} onPress={() => router.push({ pathname: '/chat/[id]', params: { id: item.id } } as any)}>
@@ -81,10 +81,13 @@ export default function JobCard({ item, actionLoading, confirmJobId, onAdvance, 
 
       {meta.nextStatus && confirmJobId !== item.id && (
         <TouchableOpacity
-          style={[styles.mainBtn, isActionLoading && { opacity: 0.7 }]}
-          onPress={() => onAdvance(item, meta.nextStatus!, meta.nextLabel!)}
-          disabled={isActionLoading}
-          activeOpacity={0.8}
+          style={[styles.mainBtn, (isActionLoading) && { opacity: 0.8, backgroundColor: '#64748B' }]}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            onAdvance(item, meta.nextStatus!, meta.nextLabel!);
+          }}
+          disabled={!!isActionLoading}
+          activeOpacity={0.7}
         >
           {isActionLoading ? (
             <ActivityIndicator color="#FFF" size="small" />

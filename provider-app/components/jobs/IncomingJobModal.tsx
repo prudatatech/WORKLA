@@ -6,6 +6,7 @@ import {
     StyleSheet, 
     TouchableOpacity, 
     Animated, 
+    Dimensions,
     ActivityIndicator
 } from 'react-native';
 import { MapPin, IndianRupee, X, Check } from 'lucide-react-native';

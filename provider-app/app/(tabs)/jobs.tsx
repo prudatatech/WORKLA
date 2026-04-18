@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Clock } from 'lucide-react-native';
 import NetInfo from '@react-native-community/netinfo';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -7,24 +7,23 @@ import { Alert, FlatList, Linking, Platform, StatusBar, StyleSheet, Text, Toucha
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import * as FileSystem from 'expo-file-system/legacy';
-import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import JobCard from '../../components/jobs/JobCard';
 import JobOfferCard from '../../components/jobs/JobOfferCard';
 import { JobCardSkeleton } from '../../components/SkeletonLoader';
 import EmptyState from '../../components/EmptyState';
 import { api } from '../../lib/api';
-import { supabase } from '../../lib/supabase';
 import { localCache } from '../../lib/localCache';
+import { supabase } from '../../lib/supabase';
+
 import { enqueueAction } from '../../lib/syncQueue';
 
 const JobsEmptyImg = require('../../assets/images/bookings-empty.png');
 
 const PRIMARY = '#1A3FFF';
-const FILTER_TABS = ['All', 'Completed', 'Cancelled'] as const;
+const FILTER_TABS = ['All', 'Active', 'Completed', 'Cancelled'] as const;
 
 export default function MyJobsScreen() {
-  const { tab } = useLocalSearchParams<{ tab?: typeof FILTER_TABS[number] }>();
   const [activeTab, setActiveTab] = useState<typeof FILTER_TABS[number]>('All');
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,44 +35,34 @@ export default function MyJobsScreen() {
   const actionInProgressRef = useRef(false); // prevents double-press
 
   const fetchJobs = useCallback(async (isSilent = false, bustCache = false) => {
-    let statusFilter: string;
-    if (activeTab === 'All') statusFilter = 'confirmed,en_route,arrived,in_progress,completed,cancelled,disputed';
-    else if (activeTab === 'Completed') statusFilter = 'completed';
-    else statusFilter = 'cancelled';
-    
-    // ⚡ Optimistic Cache Check: Instantly load cached jobs for this tab to remove UI flicker
-    const cacheKey = `provider:jobs:${activeTab}`;
+    if (!isSilent) setLoading(true);
+
+    // ── Instant: Load from cache first ──
+    const cacheKey = `jobs:${activeTab}`;
     if (!isSilent && !bustCache) {
-      localCache.get<any[]>(cacheKey).then(cached => {
-        if (cached?.length) {
-          setJobs(cached);
-          setLoading(false); // UI renders immediately
-        } else {
-          setLoading(true);
-        }
-      });
+      const cached = await localCache.get<any[]>(cacheKey);
+      if (cached) {
+        setJobs(cached);
+        setLoading(false);
+      }
     }
 
     try {
-      console.log('[JOBS DEBUG] Fetching jobs...');
-      // 🛡️ 5-second safety timeout
-      const sessionPromise = supabase.auth.getUser();
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Jobs Timeout')), 5000));
-      
-      await Promise.race([sessionPromise, timeoutPromise]);
+      let statusFilter: string;
+      if (activeTab === 'All') statusFilter = 'confirmed,en_route,arrived,in_progress,completed,cancelled';
+      else if (activeTab === 'Active') statusFilter = 'confirmed,en_route,arrived,in_progress';
+      else if (activeTab === 'Completed') statusFilter = 'completed';
+      else statusFilter = 'cancelled';
 
-      // bustCache=true adds ?refresh=true to bypass the backend Redis cache after status changes
       const suffix = bustCache ? '&refresh=true' : '';
       const res = await api.get(`/api/v1/bookings?role=provider&status=${statusFilter}${suffix}`);
+
       if (res.data) {
         setJobs(res.data);
-        localCache.set(cacheKey, res.data, 600); // 10 min local cache
+        localCache.set(cacheKey, res.data, 300); // cache for 5 min
       }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
   }, [activeTab]);
 
   const [isBusy, setIsBusy] = useState(false);
@@ -154,26 +143,19 @@ export default function MyJobsScreen() {
       hasMountedRef.current = true;
     }, [fetchJobs, fetchOffers])
   );
-  
-  // ⚡ Sync active tab with navigation params (e.g. forced 'Active' from Home)
-  useEffect(() => {
-    if (tab && FILTER_TABS.includes(tab)) {
-      setActiveTab(tab);
-    }
-  }, [tab]);
 
   const uploadProof = async (uri: string, bookingId: string, type: 'start' | 'complete') => {
     try {
       const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
       const fileName = `proof_${bookingId}_${type}_${Date.now()}.jpg`;
       const filePath = `work-proofs/${fileName}`;
-      
+
       const { error } = await supabase.storage
         .from('work-proofs')
         .upload(filePath, decode(base64), { contentType: 'image/jpeg' });
 
       if (error) throw error;
-      
+
       const { data: { publicUrl } } = supabase.storage.from('work-proofs').getPublicUrl(filePath);
       return publicUrl;
     } catch (e) {
@@ -183,34 +165,16 @@ export default function MyJobsScreen() {
   };
 
   const captureProof = async (bookingId: string, type: 'start' | 'complete') => {
-    // ⚡ Request photo with NO cropping initially (Android is buggy with allowsEditing)
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false, // We will crop manually via manipulator for reliability
-      quality: 1, // Full quality for now, manipulator will compress
+      allowsEditing: true,
+      quality: 0.7,
     });
-    
-    if (result.canceled || !result.assets[0]) return null;
-    
-    const { uri, width, height } = result.assets[0];
-    
-    // 🎨 Smart Center-Crop & Resize
-    // We target a 4:3 or 1:1 aspect ratio that is lightweight (max 1080px)
-    const targetSize = 1080;
-    const cropSize = Math.min(width, height);
-    const originX = (width - cropSize) / 2;
-    const originY = (height - cropSize) / 2;
 
-    const manipResult = await manipulateAsync(
-      uri,
-      [
-        { crop: { originX, originY, width: cropSize, height: cropSize } },
-        { resize: { width: targetSize, height: targetSize } }
-      ],
-      { compress: 0.6, format: SaveFormat.JPEG }
-    );
-
-    return manipResult.uri;
+    if (!result.canceled) {
+      return result.assets[0].uri;
+    }
+    return null;
   };
 
   const advanceStatus = async (job: any, nextStatus: string, proofUrl?: string) => {
@@ -256,47 +220,65 @@ export default function MyJobsScreen() {
 
   const confirmAndAdvance = async (job: any, nextStatus: string, nextLabel: string) => {
     if (job.status === 'confirmed' && nextStatus === 'en_route') handleNavigate(job);
-    
+
+    // ⚡ One-Tap Workflow: Start Job immediately triggers camera
     if (nextStatus === 'in_progress') {
-        Alert.alert('Proof of Work', 'Please take a photo of the workspace before starting.', [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Take Photo', onPress: async () => {
-            const uri = await captureProof(job.id, 'start');
-            if (uri) {
-                // ⚡ Haptic feedback immediately after capture
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                setActionLoading(job.id);
-                
-                // ⚡ Parallel: Start status update & photo upload simultaneously
-                try {
-                    // Update UI optimistically
-                    setJobs(curr => curr.map(j => j.id === job.id ? { ...j, status: nextStatus } : j));
+      const uri = await captureProof(job.id, 'start');
+      if (uri) {
+        setActionLoading(job.id);
+        try {
+          // 🚀 Instantly update UI and start status update
+          setJobs(curr => curr.map(j => j.id === job.id ? { ...j, status: nextStatus } : j));
 
-                    // Status update runs immediately
-                    const statusPromise = api.patch(`/api/v1/bookings/${job.id}/status`, { status: nextStatus });
-                    
-                    // Photo upload runs in background
-                    const uploadAndRefetch = async () => {
-                        const url = await uploadProof(uri, job.id, 'start');
-                        if (url) await api.patch(`/api/v1/bookings/${job.id}/status`, { status: nextStatus, proofUrl: url });
-                        fetchJobs(true, true);
-                    };
+          // Fire and forget status update (or handle in background)
+          api.patch(`/api/v1/bookings/${job.id}/status`, { status: nextStatus });
 
-                    await statusPromise;
-                    uploadAndRefetch(); // Run photo sync in background non-blocking
-                } catch (err: any) { 
-                    fetchJobs(true); // Re-sync on error
-                    Alert.alert('Process Error', err.message || 'Failed to update job status.'); 
-                }
-                finally { setActionLoading(null); }
-            }
-          }}
-        ]);
+          // Photo upload happens in background
+          uploadProof(uri, job.id, 'start').then(url => {
+            if (url) api.patch(`/api/v1/bookings/${job.id}/status`, { status: nextStatus, proofUrl: url }).catch(() => { });
+          }).catch(err => console.error('Background upload failed', err));
+
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (err: any) {
+          Alert.alert('Process Error', err.message || 'Failed to update job status.');
+        }
+        finally { setActionLoading(null); }
+      }
     } else if (nextStatus === 'completed') {
+      // For completion, we still need to confirm if it's COD
+      if (job.payment_method === 'cod') {
         setConfirmJobId(job.id);
+      } else {
+        // Non-COD: Direct to photo
+        const uri = await captureProof(job.id, 'complete');
+        if (uri) handleComplete(job, uri);
+      }
     } else {
-        advanceStatus(job, nextStatus);
+      advanceStatus(job, nextStatus);
     }
+  };
+
+  const handleComplete = async (job: any, uri: string) => {
+    setActionLoading(job.id);
+    setConfirmJobId(null);
+    try {
+      // 🚀 Step 1: Optimistic UI & Metadata Update
+      setJobs(curr => curr.map(j => j.id === job.id ? { ...j, status: 'completed' } : j));
+
+      // Step 2: Immediate Status update to backend
+      api.patch(`/api/v1/bookings/${job.id}/status`, { status: 'completed' });
+
+      // Step 3: Background Upload
+      uploadProof(uri, job.id, 'complete').then(url => {
+        if (url) api.patch(`/api/v1/bookings/${job.id}/status`, { status: 'completed', proofUrl: url }).catch(() => { });
+      }).catch(err => console.error('Background complete upload failed', err));
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      fetchJobs(true, true);
+    } catch (err: any) {
+      Alert.alert('Completion Error', err.message || 'Failed to complete job.');
+    }
+    finally { setActionLoading(null); }
   };
 
   const handleOfferAction = async (offerId: string, action: 'accept' | 'reject') => {
@@ -358,34 +340,9 @@ export default function MyJobsScreen() {
               actionLoading={actionLoading}
               confirmJobId={confirmJobId}
               onAdvance={confirmAndAdvance}
-              onConfirmComplete={async (job) => { 
-                setConfirmJobId(null); 
+              onConfirmComplete={async (job) => {
                 const uri = await captureProof(job.id, 'complete');
-                if (uri) {
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                    setActionLoading(job.id);
-                    try {
-                        // 🚀 Optimistic update
-                        setJobs(curr => curr.map(j => j.id === job.id ? { ...j, status: 'completed' } : j));
-
-                        // ⚡ Instant status update
-                        const statusPromise = api.patch(`/api/v1/bookings/${job.id}/status`, { status: 'completed' });
-                        
-                        // 📦 Background upload
-                        const uploadAndRefetch = async () => {
-                            const url = await uploadProof(uri, job.id, 'complete');
-                            if (url) await api.patch(`/api/v1/bookings/${job.id}/status`, { status: 'completed', proofUrl: url });
-                            fetchJobs(true, true);
-                        };
-
-                        await statusPromise;
-                        uploadAndRefetch();
-                    } catch (err: any) { 
-                        fetchJobs(true);
-                        Alert.alert('Upload Error', err.message || 'Failed to update job status.'); 
-                    }
-                    finally { setActionLoading(null); }
-                }
+                if (uri) handleComplete(job, uri);
               }}
               onCancelConfirm={() => setConfirmJobId(null)}
             />
@@ -396,7 +353,7 @@ export default function MyJobsScreen() {
           onRefresh={() => { fetchJobs(); fetchOffers(); }}
           refreshing={loading}
           ListHeaderComponent={
-            activeTab === 'All' ? (
+            activeTab === 'Active' ? (
               <View>
                 {isBusy && (
                   <View style={{ backgroundColor: '#FEF3C7', borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#F59E0B' }}>
@@ -416,12 +373,12 @@ export default function MyJobsScreen() {
             ) : null
           }
           ListEmptyComponent={
-            <EmptyState 
-                title={`No ${activeTab} Jobs`}
-                description={`You don't have any ${activeTab.toLowerCase()} jobs at the moment. Keep your availability on to receive new tasks!`}
-                imageSource={JobsEmptyImg}
-                ctaLabel={activeTab === 'All' ? 'Update Availability' : undefined}
-                onCtaPress={activeTab === 'All' ? () => router.navigate('/(tabs)/' as any) : undefined}
+            <EmptyState
+              title={`No ${activeTab} Jobs`}
+              description={`You don't have any ${activeTab.toLowerCase()} jobs at the moment. Keep your availability on to receive new tasks!`}
+              imageSource={JobsEmptyImg}
+              ctaLabel={activeTab === 'Active' ? 'Update Availability' : undefined}
+              onCtaPress={activeTab === 'Active' ? () => router.navigate('/(tabs)/' as any) : undefined}
             />
           }
         />

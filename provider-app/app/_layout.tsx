@@ -3,17 +3,9 @@ import * as SplashScreen from 'expo-splash-screen';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as TaskManager from 'expo-task-manager';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
-import { Buffer } from 'buffer';
-
-// Fix for react-native-svg / lucide-react-native buffer dependency
-if (typeof global.Buffer === 'undefined') {
-  global.Buffer = Buffer;
-}
-
 import 'react-native-reanimated';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '../lib/supabase';
 import { socketService } from '../lib/socket';
 import NetworkBanner from '../components/NetworkBanner';
@@ -21,16 +13,13 @@ import InAppToast from '../components/InAppToast';
 import IncomingJobModal from '../components/jobs/IncomingJobModal';
 import LoadingScreen from '../components/LoadingScreen';
 import { api } from '../lib/api';
-import { IS_NOTIFICATIONS_SAFE } from '../lib/notifications';
-
-// Safe Notifications helper — avoids the Expo Go SDK 53 crash
-const getNotifications = () => {
-    if (!IS_NOTIFICATIONS_SAFE) return null;
-    try { return require('expo-notifications'); } catch { return null; }
-};
+import { localCache } from '../lib/localCache';
+import { registerForPushNotificationsAsync } from '../lib/notifications';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
+
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 const LOCATION_TASK_NAME = 'BACKGROUND_LOCATION_TASK';
 
@@ -88,7 +77,6 @@ export default function RootLayout() {
   const segments = useSegments();
   const router = useRouter();
   const [incomingJob, setIncomingJob] = useState<any>(null);
-  const notifResponseListener = useRef<any>(null);
   const [toast, setToast] = useState<{ visible: boolean; title: string; body: string; type: 'info' | 'success' | 'warning' | 'error' }>({
     visible: false, title: '', body: '', type: 'info'
   });
@@ -97,99 +85,93 @@ export default function RootLayout() {
     setToast({ visible: true, title, body, type });
   }, []);
 
+  const handleDismissToast = useCallback(() => {
+    setToast(prev => ({ ...prev, visible: false }));
+  }, []);
+
   // 1. Session & Auth Monitoring
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setInitialized(true);
-      SplashScreen.hideAsync();
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession((prev: any) => {
-        // Only update if session state actually changed (e.g. user ID or presence)
-        if (prev?.user?.id === session?.user?.id && !!prev === !!session) return prev;
-        return session;
-      });
-    });
-
-    // 🔔 Push notification tap listener (works from killed/background state)
-    // When provider taps the incoming job notification, open the job modal
-    const Notifs = getNotifications();
-    if (Notifs) {
-      notifResponseListener.current = Notifs.addNotificationResponseReceivedListener((response: any) => {
-        const data = response.notification.request.content.data as any;
-        if (data?.type === 'new_job' || data?.type === 'job_nudge') {
-          setIncomingJob(data);
+    const initializeAuth = async () => {
+      try {
+        console.log('[AUTH] Initializing session...');
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('[AUTH ERROR] Session fetch failed:', error.message);
+          // If it's a refresh token error, clear session to prevent crash loops
+          if (error.message?.includes('Refresh Token') || (error as any).status === 400) {
+            console.warn('[AUTH] Corrupted session detected, signing out...');
+            await supabase.auth.signOut();
+            setSession(null);
+          }
+        } else {
+          setSession(session);
         }
-      });
-    }
-
-    return () => {
-      subscription.unsubscribe();
-      if (notifResponseListener.current && getNotifications()) {
-        getNotifications()?.removeNotificationSubscription(notifResponseListener.current);
+      } catch (err: any) {
+        console.error('[AUTH CRITICAL] Uncaught session error:', err);
+        // Safety sign out on unknown critical failures
+        await supabase.auth.signOut();
+      } finally {
+        setInitialized(true);
+        SplashScreen.hideAsync();
       }
     };
+
+    initializeAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log(`[AUTH STATE CHANGE] ${_event}`);
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   // 2. Navigation & Onboarding Control
-  const isRedirecting = useRef(false);
-
   useEffect(() => {
-    if (!initialized || isRedirecting.current) return;
+    if (!initialized) return;
 
-    const rootSegment = segments[0] as string;
-    const inOnboarding = rootSegment === 'onboarding';
-    const isResetting = rootSegment === 'reset-password';
-    const isTabs = rootSegment === '(tabs)';
-    const isIndex = !rootSegment;
-    const isAllowedRoot = rootSegment === 'services' || rootSegment === 'payouts' || rootSegment === 'service-areas';
+    const inOnboarding = segments[0] === 'onboarding';
+    const isResetting = (segments[0] as string) === 'reset-password';
+    const isIndex = !segments[0];
 
-    const performNavigation = async () => {
-      if (!session) {
-        if (!isIndex && !isResetting) {
-          isRedirecting.current = true;
-          router.replace('/');
-          setTimeout(() => { isRedirecting.current = false; }, 500);
-        }
-      } else {
+    if (!session) {
+      if (!isIndex && !isResetting) router.replace('/');
+    } else {
+      const checkOnboarding = async () => {
         try {
-          const { data, error } = await supabase
+          // ⚡ Optimistic check from cache for instant startup
+          const cacheKey = `onboarding:${session.user.id}`;
+          const cachedOnboarding = await localCache.get<boolean>(cacheKey);
+          
+          if (cachedOnboarding) {
+            if (isIndex || inOnboarding) router.replace('/(tabs)');
+          }
+
+          const { data } = await supabase
             .from('provider_details')
             .select('onboarding_completed')
             .eq('provider_id', session.user.id)
             .single();
 
-          if (error) throw error;
-
           if (data?.onboarding_completed) {
-            if (!isTabs && !isAllowedRoot) {
-              isRedirecting.current = true;
-              router.replace('/(tabs)');
-              setTimeout(() => { isRedirecting.current = false; }, 500);
-            }
+            await localCache.set(cacheKey, true, 86400); // cache for 24h
+            if (isIndex || inOnboarding) router.replace('/(tabs)');
           } else {
-            if (!inOnboarding && !isAllowedRoot) {
-              isRedirecting.current = true;
-              router.replace('/onboarding');
-              setTimeout(() => { isRedirecting.current = false; }, 500);
-            }
+            if (!inOnboarding) router.replace('/onboarding');
           }
         } catch (e) {
           console.error('Onboarding check failed:', e);
-          if (!inOnboarding && !isTabs && !isAllowedRoot) {
-            isRedirecting.current = true;
-            router.replace('/onboarding');
-            setTimeout(() => { isRedirecting.current = false; }, 500);
-          }
+          if (!inOnboarding) router.replace('/onboarding');
         }
-      }
-    };
-
-    performNavigation();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user?.id, initialized, segments[0]]);
+      };
+      
+      checkOnboarding();
+      
+      // Ensure push token is registered whenever session is active
+      registerForPushNotificationsAsync();
+    }
+  }, [session, initialized, segments]);
 
   // 3. Socket.io Notification Handler
   useEffect(() => {
@@ -279,7 +261,7 @@ export default function RootLayout() {
         title={toast.title}
         body={toast.body}
         type={toast.type}
-        onDismiss={() => setToast(prev => ({ ...prev, visible: false }))}
+        onDismiss={handleDismissToast}
       />
     </ThemeProvider>
   );
