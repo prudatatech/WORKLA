@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import {
   Calendar, CheckCircle2, Clock, MapPin, MessageCircle,
   Navigation2, Phone, Play, Wrench, XCircle

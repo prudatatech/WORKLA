@@ -15,6 +15,17 @@ import LoadingScreen from '../components/LoadingScreen';
 import { api } from '../lib/api';
 import { localCache } from '../lib/localCache';
 import { registerForPushNotificationsAsync } from '../lib/notifications';
+import { useAlertSystem } from '../hooks/useAlertSystem';
+import * as Notifications from 'expo-notifications';
+
+// Handle notifications in foreground
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -80,6 +91,8 @@ export default function RootLayout() {
   const [toast, setToast] = useState<{ visible: boolean; title: string; body: string; type: 'info' | 'success' | 'warning' | 'error' }>({
     visible: false, title: '', body: '', type: 'info'
   });
+
+  const { startAlert, stopAlert } = useAlertSystem();
 
   const showToast = useCallback((title: string, body: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
     setToast({ visible: true, title, body, type });
@@ -186,6 +199,18 @@ export default function RootLayout() {
       socket.on('notification:alert', (payload: any) => {
         console.log('🔔 Received Socket Alert:', payload);
         if (payload.type === 'NEW_JOB' || payload.type === 'new_job') {
+          // Trigger System Notification
+          Notifications.scheduleNotificationAsync({
+            content: {
+              title: "New Job Alert! ⚡",
+              body: `${payload.data.service} - ₹${payload.data.estimatedPrice}`,
+              data: payload.data,
+              sound: 'default',
+            },
+            trigger: null,
+          });
+
+          startAlert();
           setIncomingJob(payload.data);
         } else {
           showToast(payload.title || 'Notification', payload.body, 'info');
@@ -211,7 +236,21 @@ export default function RootLayout() {
         const notif = payload.new;
         if (notif) {
           if (notif.type === 'new_job') {
-            setIncomingJob(notif.data);
+            const jobData = typeof notif.data === 'string' ? JSON.parse(notif.data) : notif.data;
+
+            // Trigger System Notification
+            Notifications.scheduleNotificationAsync({
+              content: {
+                title: jobData.service || "New Job Alert! ⚡",
+                body: jobData.address || "New request nearby",
+                data: jobData,
+                sound: 'default',
+              },
+              trigger: null,
+            });
+
+            startAlert();
+            setIncomingJob(jobData);
           } else {
             showToast(notif.title, notif.body, 'success');
           }
@@ -248,11 +287,16 @@ export default function RootLayout() {
           try {
             const res = await api.post(`/api/v1/job-offers/${incomingJob.offerId}/accept`, {});
             if (res.error) throw new Error(res.error);
+            stopAlert(); // 🛑 Stop Sound & Vibe
             setIncomingJob(null);
             router.push('/(tabs)/jobs');
           } catch (e: any) {
             Alert.alert('Error', e.message);
           }
+        }}
+        onReject={() => {
+            stopAlert(); // 🛑 Stop Sound & Vibe
+            setIncomingJob(null);
         }}
       />
 

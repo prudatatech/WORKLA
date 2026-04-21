@@ -26,7 +26,8 @@ export async function registerForPushNotificationsAsync() {
       lightColor: '#1A3FFF',
       lockscreenVisibility: 1, // PUBLIC
       showBadge: true,
-      enableVibration: true
+      enableVibration: true,
+      sound: 'default' 
     });
   }
 

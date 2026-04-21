@@ -10,7 +10,6 @@ import ProviderHero from '../../components/home/ProviderHero';
 import StatsRow from '../../components/home/StatsRow';
 import WeeklyChart from '../../components/home/WeeklyChart';
 import LiveMap from '../../components/home/LiveMap';
-import IncomingJobModal from '../../components/home/IncomingJobModal';
 import { StatCardSkeleton, EarningRowSkeleton } from '../../components/SkeletonLoader';
 import { Clock, MapPin } from 'lucide-react-native';
 import { api } from '../../lib/api';
@@ -48,8 +47,6 @@ export default function ProviderHomeScreen() {
   const [todayJobs, setTodayJobs] = useState(0);
   const [rating, setRating] = useState(0);
   const [weeklyData, setWeeklyData] = useState<number[]>(new Array(7).fill(0));
-  const [incomingJob, setIncomingJob] = useState<IncomingJob | null>(null);
-  const [countdown, setCountdown] = useState(30);
   const [providerName, setProviderName] = useState('Provider');
   const [incompleteProfile, setIncompleteProfile] = useState<{ type: 'kyc' | 'bank' | 'both' | null } | null>(null);
   const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -185,78 +182,12 @@ export default function ProviderHomeScreen() {
     }
   }, []);
 
-  const handleReject = useCallback(async (offerId: string) => {
-    if (countdownRef.current) clearInterval(countdownRef.current);
-    Animated.timing(slideAnim, { toValue: 500, duration: 300, useNativeDriver: true }).start(() => setIncomingJob(null));
-    await supabase.from('job_offers').update({ status: 'rejected' }).eq('id', offerId);
-  }, [slideAnim]);
-
-  const handleAccept = useCallback(async (offerId: string) => {
-    // 🚀 Optimistic UI: Dismiss modal INSTANTLY with success feedback
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    if (countdownRef.current) clearInterval(countdownRef.current);
-    Animated.timing(slideAnim, { toValue: 500, duration: 300, useNativeDriver: true }).start(() => setIncomingJob(null));
-    
-    // API call runs in background while user already sees success
-    try {
-      const res = await api.post(`/api/v1/job-offers/${offerId}/accept`, {});
-      if (res.data?.success) {
-        await loadStats(); // Refresh stats silently to fetch active job
-        
-        // Push user to Jobs screen so they can see full details and map
-        setTimeout(() => {
-            router.push('/(tabs)/jobs' as any);
-        }, 600);
-      } else { 
-        // Only alert if the accept actually failed (rare)
-        Alert.alert('Job Unavailable', res.data?.error || res.data?.message || 'This job has already been taken.'); 
-      }
-    } catch (e: any) { 
-        const msg = e.response?.data?.error || e.response?.data?.message || e.message;
-        Alert.alert('Error', msg || 'Failed to accept job'); 
-    }
-  }, [slideAnim, loadStats]);
-
-  const showIncomingJob = useCallback(async (offer: any) => {
-    const { data: booking } = await supabase.from('bookings').select('*, service_subcategories(name), profiles!bookings_customer_id_fkey(full_name)').eq('id', offer.booking_id).single();
-    if (!booking) return;
-    setIncomingJob({
-      offerId: offer.id, bookingId: offer.booking_id,
-      service: booking.service_subcategories?.name ?? 'Service',
-      address: booking.customer_address ?? 'Address not set',
-      distance: offer.distance_km ? `${offer.distance_km.toFixed(1)} km away` : 'Nearby',
-      estimatedPrice: booking.total_amount ?? 0,
-      customerName: (booking.profiles as any)?.full_name ?? 'Customer',
-      scheduledDate: booking.scheduled_date ?? '', timeSlot: booking.scheduled_time_slot ?? '',
-    });
-    setCountdown(30);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Vibration.vibrate([0, 500, 200, 500]);
-    Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, bounciness: 8 }).start();
-    if (countdownRef.current) clearInterval(countdownRef.current);
-    countdownRef.current = setInterval(() => {
-      setCountdown(prev => { if (prev <= 1) { clearInterval(countdownRef.current!); handleReject(offer.id); return 0; } return prev - 1; });
-    }, 1000);
-  }, [slideAnim, handleReject]);
-
-  const subscribeToOffers = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    supabase.channel('provider-offers').on('postgres_changes', {
-      event: 'INSERT', schema: 'public', table: 'job_offers', filter: `provider_id=eq.${user.id}`,
-    }, (payload) => {
-      const offer = payload.new as any;
-      if (offer.status === 'pending') showIncomingJob(offer);
-    }).subscribe();
-  }, [showIncomingJob]);
-
   useEffect(() => { 
     loadStats(); 
-    subscribeToOffers(); 
     
     // Register for push notifications for "Always On" reliability
     registerForPushNotificationsAsync();
-  }, [loadStats, subscribeToOffers]);
+  }, [loadStats]);
 
   // Silent refresh when tab is re-focused (e.g. after accepting a job)
   useFocusEffect(
@@ -441,11 +372,6 @@ export default function ProviderHomeScreen() {
           </View>
         )}
       </ScrollView>
-
-      <IncomingJobModal
-        incomingJob={incomingJob} countdown={countdown} slideAnim={slideAnim}
-        onAccept={handleAccept} onReject={handleReject}
-      />
     </SafeAreaView>
   );
 }

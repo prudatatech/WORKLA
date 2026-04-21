@@ -210,12 +210,21 @@ export default function MyJobsScreen() {
     const lat = job.customer_latitude;
     const lng = job.customer_longitude;
     if (!lat || !lng) { Alert.alert('Location Missing', 'Customer location coordinates are not available.'); return; }
-    const scheme = Platform.OS === 'ios' ? 'maps:' : 'geo:';
     const url = Platform.select({
-      ios: `${scheme}0,0?q=${lat},${lng}`,
-      android: `${scheme}${lat},${lng}?q=${lat},${lng}`,
+      ios: `maps:0,0?q=${lat},${lng}`,
+      android: `google.navigation:q=${lat},${lng}`,
     });
-    if (url) Linking.openURL(url);
+    
+    if (url) {
+      Linking.canOpenURL(url).then(supported => {
+        if (supported) {
+          Linking.openURL(url);
+        } else {
+          // Fallback to generic geo scheme if google.navigation is not supported
+          Linking.openURL(`geo:${lat},${lng}?q=${lat},${lng}`);
+        }
+      });
+    }
   };
 
   const confirmAndAdvance = async (job: any, nextStatus: string, nextLabel: string) => {
