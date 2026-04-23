@@ -53,7 +53,7 @@ supabase.auth.onAuthStateChange((_event, session) => {
 export async function apiRequest<T = any>(
     path: string,
     options: RequestInit = {}
-): Promise<{ data: T | null; error: string | null; isRecovering?: boolean }> {
+): Promise<{ data: T | null; error: string | null; details?: string | null; isRecovering?: boolean }> {
     try {
         const token = await getCachedToken();
 

@@ -83,10 +83,9 @@ export default function RequestServiceScreen() {
         fetchData();
         fetchCoupons();
         fetchGoldStatus();
-        checkExistingDraft();
     }, []);
 
-    const checkExistingDraft = async () => {
+    const checkExistingDraft = async (srvs: any[], subs: any[]) => {
         try {
             if (resume !== 'true' || !draftId) return;
 
@@ -96,8 +95,14 @@ export default function RequestServiceScreen() {
                 if (draft) {
                     // Populate Form
                     const formData = draft.form_data;
-                    if (formData.selectedSubcategoryId && subcategories.length > 0) {
-                        const matchedSub = subcategories.find(s => s.id === formData.selectedSubcategoryId);
+                    
+                    if (formData.selectedServiceId && srvs.length > 0) {
+                        const matchedSrv = srvs.find(s => s.id === formData.selectedServiceId);
+                        if (matchedSrv) setSelectedService(matchedSrv);
+                    }
+
+                    if (formData.selectedSubcategoryId && subs.length > 0) {
+                        const matchedSub = subs.find(s => s.id === formData.selectedSubcategoryId);
                         if (matchedSub) setSelectedSubcategory(matchedSub);
                     }
                     if (formData.description) setDescription(formData.description);
@@ -122,15 +127,16 @@ export default function RequestServiceScreen() {
         const steps: Step[] = ['trade', 'task', 'details', 'confirm'];
         const stepIndex = targetStep ? steps.indexOf(targetStep) : steps.indexOf(step);
         
-        if (!selectedService) return;
+        if (!selectedService || !selectedSubcategory) return;
 
         try {
             await api.post('/api/v1/drafts', {
-                serviceId: selectedService.id,
+                serviceId: selectedSubcategory.id,
                 currentStep: stepIndex + 1,
                 totalSteps: steps.length,
                 formData: {
-                    selectedSubcategoryId: selectedSubcategory?.id,
+                    selectedServiceId: selectedService.id,
+                    selectedSubcategoryId: selectedSubcategory.id,
                     description,
                     selectedDate,
                     selectedSlot,
@@ -210,6 +216,10 @@ export default function RequestServiceScreen() {
                 }
             }
         }
+        
+        // After fetching all data, check for existing draft to restore
+        checkExistingDraft(srvs || [], subs || []);
+        
         setLoading(false);
     };
 
