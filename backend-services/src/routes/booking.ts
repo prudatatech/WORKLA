@@ -60,16 +60,16 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
         try {
             // 🗺️ Geo-fencing check: Is this area served?
             const { data: isServed, error: zoneError } = await supabaseAdmin
-                .rpc('is_location_in_service_zone', { 
-                    p_lat: body.customerLatitude, 
-                    p_lng: body.customerLongitude 
+                .rpc('is_location_in_service_zone', {
+                    p_lat: body.customerLatitude,
+                    p_lng: body.customerLongitude
                 });
 
             if (zoneError) throw zoneError;
             if (!isServed) {
-                return reply.code(400).send({ 
-                    error: 'AREA_NOT_SERVED', 
-                    details: 'Sorry, we do not provide services in this area yet.' 
+                return reply.code(400).send({
+                    error: 'AREA_NOT_SERVED',
+                    details: 'Sorry, we do not provide services in this area yet.'
                 } as any);
             }
 
@@ -137,32 +137,38 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
                         const { emitToUser } = await import('../socket');
                         for (const offer of offers) {
                             // 1. Persist notification in DB
+                            // NOTE: `type` column is NOT NULL in the notifications table
                             await supabaseAdmin.from('notifications').insert({
                                 user_id: offer.provider_id,
-                                title: 'New Service Request! 🚀',
+                                title: 'New Service Request! ',
                                 body: `${body.serviceNameSnapshot || 'New Job'} available now.`,
-                                type: 'new_job',
+                                type: 'new_job', // ← REQUIRED: was missing, causing insert failure
                                 data: {
+                                    type: 'new_job',
                                     bookingId: data.id,
                                     offerId: offer.id,
                                     amount: body.totalAmount,
-                                    serviceName: body.serviceNameSnapshot,
-                                    address: body.customerAddress
+                                    service: body.serviceNameSnapshot,    // normalized key
+                                    serviceName: body.serviceNameSnapshot, // keep both for compat
+                                    address: body.customerAddress,
+                                    customer_address: body.customerAddress // keep both for compat
                                 },
                                 is_read: false
                             });
 
                             // 2. Emit socket event for instant popup
                             emitToUser(offer.provider_id, 'notification:alert', {
-                                title: 'New Service Request! 🚀',
+                                title: 'New Service Request! ',
                                 body: `${body.serviceNameSnapshot || 'New Job'} available now.`,
-                                type: 'new_job',
+                                type: 'new_job', // consistent TYPE casing
                                 data: {
                                     bookingId: data.id,
                                     offerId: offer.id,
                                     amount: body.totalAmount,
-                                    serviceName: body.serviceNameSnapshot,
-                                    address: body.customerAddress
+                                    service: body.serviceNameSnapshot,    // normalized key
+                                    serviceName: body.serviceNameSnapshot, // keep both for compat
+                                    address: body.customerAddress,
+                                    customer_address: body.customerAddress // keep both for compat
                                 }
                             });
                         }
@@ -174,7 +180,7 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
             }
 
             // Also try EventBus (non-blocking, for nudge scheduling etc.)
-            EventBus.publish('booking.created', { bookingId: data.id }, { 'x-request-id': request.id }).catch(() => {});
+            EventBus.publish('booking.created', { bookingId: data.id }, { 'x-request-id': request.id }).catch(() => { });
 
             return reply.code(201).send({
                 success: true,
@@ -238,8 +244,8 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
                 enrichedData.profiles = provsRes.data || null;
 
                 return enrichedData;
-            // Active bookings: 15s TTL (status changes frequently)
-            // Terminal bookings (completed/cancelled): 300s TTL (immutable)
+                // Active bookings: 15s TTL (status changes frequently)
+                // Terminal bookings (completed/cancelled): 300s TTL (immutable)
             }, ['completed', 'cancelled', 'disputed'].includes('') ? 300 : 15, forceRefresh);
 
             if (!data) return reply.code(404).send({ error: 'Booking not found.' });
@@ -314,7 +320,7 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
                 let enrichedData = data || [];
                 if (enrichedData.length > 0) {
                     const subcategoryIds = [...new Set(enrichedData.map(b => b.subcategory_id).filter(Boolean))];
-                    const targetProfileIds = role === 'provider' 
+                    const targetProfileIds = role === 'provider'
                         ? [...new Set(enrichedData.map(b => b.customer_id).filter(Boolean))]
                         : [...new Set(enrichedData.map(b => b.provider_id).filter(Boolean))];
 
@@ -359,10 +365,10 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
             type: 'object',
             required: ['status'],
             properties: {
-                status: { 
-                    type: 'string', 
+                status: {
+                    type: 'string',
                     enum: [
-                        'requested', 'searching', 'confirmed', 'en_route', 
+                        'requested', 'searching', 'confirmed', 'en_route',
                         'arrived', 'in_progress', 'completed', 'cancelled', 'disputed'
                     ]
                 },
@@ -392,10 +398,10 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
                 // Special case: Manual confirmation requires a provider_id check
                 const { data: booking } = await supabaseAdmin.from('bookings').select('provider_id').eq('id', id).single();
                 if (!booking?.provider_id) {
-                    return reply.code(400).send({ 
+                    return reply.code(400).send({
                         success: false,
-                        error: 'ILLEGAL_TRANSITION', 
-                        details: 'Cannot confirm booking without a provider.' 
+                        error: 'ILLEGAL_TRANSITION',
+                        details: 'Cannot confirm booking without a provider.'
                     });
                 }
                 const data = await JobService.confirmBookingManual(id, booking.provider_id, request.id, request.log);
@@ -404,10 +410,10 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
 
             // Standard Status Transition (Enterprise Hardened)
             const data = await JobService.updateBookingStatus(
-                id, 
-                status, 
-                user.sub, 
-                request.log, 
+                id,
+                status,
+                user.sub,
+                request.log,
                 { cancellationReason, proofUrl }
             );
 
@@ -415,15 +421,15 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
         } catch (err: any) {
             fastify.log.error(err);
             if (err.statusCode) {
-                return reply.code(err.statusCode).send({ 
+                return reply.code(err.statusCode).send({
                     success: false,
-                    error: err.code || 'UNEXPECTED_ERROR', 
-                    details: err.message 
+                    error: err.code || 'UNEXPECTED_ERROR',
+                    details: err.message
                 });
             }
-            return reply.code(500).send({ 
+            return reply.code(500).send({
                 success: false,
-                error: 'INTERNAL_SERVER_ERROR', 
+                error: 'INTERNAL_SERVER_ERROR',
                 details: err.message
             });
         }
@@ -440,10 +446,10 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
             return reply.send({ success: true, data });
         } catch (err: any) {
             fastify.log.error(err);
-            return reply.code(err.statusCode || 500).send({ 
-                success: false, 
-                error: err.code || 'UNEXPECTED_ERROR', 
-                message: err.message 
+            return reply.code(err.statusCode || 500).send({
+                success: false,
+                error: err.code || 'UNEXPECTED_ERROR',
+                message: err.message
             });
         }
     });
@@ -488,9 +494,9 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
             today.setHours(0, 0, 0, 0);
 
             if (targetDate < today) {
-                return reply.code(400).send({ 
-                    error: 'INVALID_DATE', 
-                    details: 'Cannot reschedule to a past date.' 
+                return reply.code(400).send({
+                    error: 'INVALID_DATE',
+                    details: 'Cannot reschedule to a past date.'
                 } as any);
             }
 
@@ -500,7 +506,7 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
                 if (newSlot.startsWith('8 AM')) slotDeadline = 8;
                 if (newSlot.startsWith('12 PM')) slotDeadline = 12;
                 if (newSlot.startsWith('4 PM')) slotDeadline = 16;
-                
+
                 if (currentHour >= slotDeadline) {
                     return reply.code(400).send({
                         error: 'PAST_SLOT',
@@ -529,16 +535,16 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
 
             // Invalidate Caches
             await cache.invalidatePattern(`bookings:${user.sub}:*`);
-            
+
             // Fire event for notifications
             EventBus.publish('booking.rescheduled', { bookingId: id }, { 'x-request-id': request.id });
 
             return reply.send({ success: true, message: 'Booking rescheduled successfully.', data: result });
         } catch (err: any) {
             fastify.log.error(err);
-            return reply.code(500).send({ 
-                error: 'INTERNAL_ERROR', 
-                details: err.message 
+            return reply.code(500).send({
+                error: 'INTERNAL_ERROR',
+                details: err.message
             } as any);
         }
     });
@@ -594,13 +600,13 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
             }
         },
         response: {
-            200: CommonSchemas.SuccessResponse({ 
-                type: 'object', 
-                properties: { 
+            200: CommonSchemas.SuccessResponse({
+                type: 'object',
+                properties: {
                     invoiceUrl: { type: 'string' },
                     invoiceNumber: { type: 'string' },
                     invoiceType: { type: 'string' }
-                } 
+                }
             }),
             404: CommonSchemas.ErrorResponse,
             403: CommonSchemas.ErrorResponse,

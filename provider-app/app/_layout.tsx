@@ -3,7 +3,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as TaskManager from 'expo-task-manager';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import 'react-native-reanimated';
 import { supabase } from '../lib/supabase';
@@ -24,6 +24,8 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
@@ -81,6 +83,22 @@ export const unstable_settings = {
   anchor: '(tabs)',
 };
 
+/**
+ * Normalize incoming job data from ANY source (socket, realtime, trigger)
+ * into a consistent shape for the IncomingJobModal.
+ */
+function normalizeJobData(raw: any) {
+  return {
+    bookingId: raw.bookingId || raw.booking_id || raw.id,
+    offerId:   raw.offerId   || raw.offer_id,
+    service:   raw.service   || raw.serviceName || raw.service_name || 'Service Request',
+    serviceName: raw.serviceName || raw.service || raw.service_name || 'Service Request',
+    address:   raw.address   || raw.customer_address || 'Nearby Location',
+    amount:    raw.amount    || raw.total_amount || raw.estimatedPrice || 0,
+    customerName: raw.customerName || raw.customer_name || '',
+  };
+}
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [initialized, setInitialized] = useState(false);
@@ -93,6 +111,8 @@ export default function RootLayout() {
   });
 
   const { startAlert, stopAlert } = useAlertSystem();
+  // Ref to prevent duplicate processing of same event
+  const processingJobRef = useRef<string | null>(null);
 
   const showToast = useCallback((title: string, body: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
     setToast({ visible: true, title, body, type });
@@ -101,6 +121,44 @@ export default function RootLayout() {
   const handleDismissToast = useCallback(() => {
     setToast(prev => ({ ...prev, visible: false }));
   }, []);
+
+  /**
+   * Central handler for incoming job — prevents duplicate triggers
+   * and fires all alerts atomically.
+   */
+  const triggerIncomingJob = useCallback((rawData: any, source: string) => {
+    const jobData = normalizeJobData(rawData);
+    const dedupeKey = jobData.bookingId || jobData.offerId;
+
+    if (!dedupeKey) {
+      console.warn(`[IncomingJob][${source}] Skipped — no bookingId/offerId in payload`, rawData);
+      return;
+    }
+    if (processingJobRef.current === dedupeKey) {
+      console.log(`[IncomingJob][${source}] Deduplicated — already showing ${dedupeKey}`);
+      return;
+    }
+
+    console.log(`[IncomingJob][${source}] ✅ Triggering popup for booking ${dedupeKey}`);
+    processingJobRef.current = dedupeKey;
+
+    // 1. Schedule system push notification
+    Notifications.scheduleNotificationAsync({
+      content: {
+        title: '🔔 New Job Alert!',
+        body: `${jobData.serviceName} — ₹${jobData.amount}`,
+        data: jobData,
+        sound: 'default',
+      },
+      trigger: null,
+    }).catch(e => console.error('[Notifications] Failed to schedule:', e));
+
+    // 2. Start vibration + sound
+    startAlert();
+
+    // 3. Show modal
+    setIncomingJob(jobData);
+  }, [startAlert]);
 
   // 1. Session & Auth Monitoring
   useEffect(() => {
@@ -111,7 +169,6 @@ export default function RootLayout() {
         
         if (error) {
           console.error('[AUTH ERROR] Session fetch failed:', error.message);
-          // If it's a refresh token error, clear session to prevent crash loops
           if (error.message?.includes('Refresh Token') || (error as any).status === 400) {
             console.warn('[AUTH] Corrupted session detected, signing out...');
             await supabase.auth.signOut();
@@ -122,7 +179,6 @@ export default function RootLayout() {
         }
       } catch (err: any) {
         console.error('[AUTH CRITICAL] Uncaught session error:', err);
-        // Safety sign out on unknown critical failures
         await supabase.auth.signOut();
       } finally {
         setInitialized(true);
@@ -153,7 +209,6 @@ export default function RootLayout() {
     } else {
       const checkOnboarding = async () => {
         try {
-          // ⚡ Optimistic check from cache for instant startup
           const cacheKey = `onboarding:${session.user.id}`;
           const cachedOnboarding = await localCache.get<boolean>(cacheKey);
           
@@ -168,7 +223,7 @@ export default function RootLayout() {
             .single();
 
           if (data?.onboarding_completed) {
-            await localCache.set(cacheKey, true, 86400); // cache for 24h
+            await localCache.set(cacheKey, true, 86400);
             if (isIndex || inOnboarding) router.replace('/(tabs)');
           } else {
             if (!inOnboarding) router.replace('/onboarding');
@@ -180,88 +235,100 @@ export default function RootLayout() {
       };
       
       checkOnboarding();
-      
-      // Ensure push token is registered whenever session is active
       registerForPushNotificationsAsync();
     }
   }, [session, initialized, segments]);
 
   // 3. Socket.io Notification Handler
+  // Uses a cleanup function to remove listener and prevent duplicates.
   useEffect(() => {
     if (!session) {
       socketService.disconnect();
       return;
     }
 
-    const setupSocket = async () => {
-      const socket = await socketService.getSocket();
-      
-      socket.on('notification:alert', (payload: any) => {
-        console.log('🔔 Received Socket Alert:', payload);
-        if (payload.type === 'NEW_JOB' || payload.type === 'new_job') {
-          // Trigger System Notification
-          Notifications.scheduleNotificationAsync({
-            content: {
-              title: "New Job Alert! ⚡",
-              body: `${payload.data.service} - ₹${payload.data.estimatedPrice}`,
-              data: payload.data,
-              sound: 'default',
-            },
-            trigger: null,
-          });
+    let mounted = true;
+    let socket: any = null;
 
-          startAlert();
-          setIncomingJob(payload.data);
-        } else {
-          showToast(payload.title || 'Notification', payload.body, 'info');
-        }
-      });
+    const handler = (payload: any) => {
+      if (!mounted) return;
+      console.log('[Socket] 🔔 notification:alert received:', JSON.stringify(payload));
+      const type = (payload.type || '').toLowerCase();
+      if (type === 'new_job') {
+        triggerIncomingJob(payload.data, 'socket');
+      } else {
+        showToast(payload.title || 'Notification', payload.body || '', 'info');
+      }
+    };
+
+    const setupSocket = async () => {
+      try {
+        socket = await socketService.getSocket();
+        // Remove any stale listener before adding fresh one
+        socket.off('notification:alert', handler);
+        socket.on('notification:alert', handler);
+        console.log('[Socket] ✅ notification:alert listener registered');
+      } catch (e) {
+        console.error('[Socket] Setup failed:', e);
+      }
     };
 
     setupSocket();
-  }, [session, showToast]);
+
+    return () => {
+      mounted = false;
+      if (socket) {
+        socket.off('notification:alert', handler);
+        console.log('[Socket] 🔌 notification:alert listener removed');
+      }
+    };
+  }, [session, triggerIncomingJob, showToast]);
 
   // 4. Supabase Realtime: listen for new notification rows
+  // Handles BOTH 'new_job' (from booking.ts insert) AND 'job_offer' (from DB trigger).
   useEffect(() => {
     if (!session?.user?.id) return;
 
+    console.log('[Realtime] Subscribing to notifications for user:', session.user.id);
+
     const channel = supabase
-      .channel('provider-notifications')
+      .channel(`provider-notifications-${session.user.id}`)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'notifications',
         filter: `user_id=eq.${session.user.id}`,
       }, (payload: any) => {
+        console.log('[Realtime] 📩 New notification row:', JSON.stringify(payload.new));
         const notif = payload.new;
-        if (notif) {
-          if (notif.type === 'new_job') {
-            const jobData = typeof notif.data === 'string' ? JSON.parse(notif.data) : notif.data;
+        if (!notif) return;
 
-            // Trigger System Notification
-            Notifications.scheduleNotificationAsync({
-              content: {
-                title: jobData.service || "New Job Alert! ⚡",
-                body: jobData.address || "New request nearby",
-                data: jobData,
-                sound: 'default',
-              },
-              trigger: null,
-            });
+        // Parse data JSONB — may arrive as string or object
+        const jobData = typeof notif.data === 'string'
+          ? (() => { try { return JSON.parse(notif.data); } catch { return {}; } })()
+          : (notif.data || {});
 
-            startAlert();
-            setIncomingJob(jobData);
-          } else {
-            showToast(notif.title, notif.body, 'success');
-          }
+        // Accept both 'new_job' and 'job_offer' types from any source
+        const notifType = (notif.type || '').toLowerCase();
+        const dataType  = (jobData.type || '').toLowerCase();
+
+        if (notifType === 'new_job' || dataType === 'new_job' || notifType === 'job_offer') {
+          console.log('[Realtime] ✅ Job notification detected — triggering popup');
+          // For job_offer from DB trigger: offerId is in jobData.offer_id
+          triggerIncomingJob(jobData, 'realtime');
+        } else {
+          showToast(notif.title || 'Notification', notif.body || '', 'info');
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[Realtime] Subscription status:', status);
+      });
 
-    return () => { supabase.removeChannel(channel); };
-  }, [session, showToast]);
-
-
+    return () => {
+      console.log('[Realtime] Unsubscribing notifications channel');
+      supabase.removeChannel(channel);
+    };
+  }, [session?.user?.id, triggerIncomingJob, showToast]);
 
   if (!initialized) return <LoadingScreen />;
 
@@ -282,21 +349,29 @@ export default function RootLayout() {
       <IncomingJobModal 
         visible={!!incomingJob} 
         jobData={incomingJob} 
-        onClose={() => setIncomingJob(null)} 
+        onClose={() => {
+          stopAlert();
+          setIncomingJob(null);
+          processingJobRef.current = null;
+        }} 
         onAccept={async (bookingId) => {
           try {
-            const res = await api.post(`/api/v1/job-offers/${incomingJob.offerId}/accept`, {});
+            const offerId = incomingJob?.offerId;
+            if (!offerId) throw new Error('No offer ID found. Cannot accept.');
+            const res = await api.post(`/api/v1/job-offers/${offerId}/accept`, {});
             if (res.error) throw new Error(res.error);
-            stopAlert(); // 🛑 Stop Sound & Vibe
+            stopAlert();
             setIncomingJob(null);
+            processingJobRef.current = null;
             router.push('/(tabs)/jobs');
           } catch (e: any) {
             Alert.alert('Error', e.message);
           }
         }}
         onReject={() => {
-            stopAlert(); // 🛑 Stop Sound & Vibe
+            stopAlert();
             setIncomingJob(null);
+            processingJobRef.current = null;
         }}
       />
 
