@@ -42,23 +42,29 @@ export default async function providerRoutes(fastifyInstance: FastifyInstance) {
 
             if (error) throw error;
 
-            // Fetch any current active booking
-            const { data: activeBooking } = await supabaseAdmin
-                .from('bookings')
-                .select('id')
-                .eq('provider_id', user.sub)
-                .in('status', ACTIVE_BOOKING_STATUSES)
-                .limit(1)
-                .single();
+            // Fetch any current active booking (Wrapped in try/catch to prevent 500 if bookings table has issues)
+            let activeBooking = null;
+            try {
+                const { data: booking } = await supabaseAdmin
+                    .from('bookings')
+                    .select('id')
+                    .eq('provider_id', user.sub)
+                    .in('status', ACTIVE_BOOKING_STATUSES)
+                    .limit(1)
+                    .maybeSingle();
+                activeBooking = booking;
+            } catch (bErr) {
+                console.warn('[Backend] Failed to fetch active booking for provider:', bErr);
+            }
+            
+            // Mask sensitive fields if necessary, but ensure required frontend keys exist
+            const profileData = {
+                ...data,
+                hasActiveJob: !!activeBooking,
+                activeJobId: activeBooking?.id || null
+            };
 
-            return reply.send({ 
-                success: true, 
-                data: {
-                    ...data,
-                    hasActiveJob: !!activeBooking,
-                    activeJobId: activeBooking?.id || null
-                }
-            });
+            return reply.send({ success: true, data: profileData });
         } catch (err: any) {
             return reply.code(500).send({ error: 'Failed to fetch profile.', details: err.message });
         }
@@ -146,7 +152,7 @@ export default async function providerRoutes(fastifyInstance: FastifyInstance) {
                 .eq('id', user.sub)
                 .single();
 
-            const rating = profile?.average_rating || 0;
+            const rating = profile?.average_rating || (profile as any)?.avg_rating || 0;
 
             // 4. Calculate Response Time (Avg time to accept an offer in minutes)
             const { data: offers } = await supabaseAdmin

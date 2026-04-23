@@ -72,11 +72,20 @@ export default function JobMarketplace() {
         p_provider_id: user.id
       });
 
-      if (error) throw error;
+      if (error) {
+         console.error('[Marketplace] RPC get_available_jobs error:', error);
+         throw error;
+      }
+      
+      console.log(`[Marketplace] Found ${data?.length || 0} jobs for provider ${user.id}`);
       setJobs(data || []);
     } catch (e: any) {
-      console.error('Marketplace Error:', e);
-      Alert.alert('Error', 'Failed to load available jobs');
+      console.error('Marketplace Error Details:', {
+         message: e.message,
+         details: e.details,
+         hint: e.hint
+      });
+      Alert.alert('Error', 'Failed to load available jobs. Please try refreshing.');
     } finally {
       setLoading(false);
     }

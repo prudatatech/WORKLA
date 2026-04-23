@@ -26,7 +26,6 @@ export async function registerForPushNotificationsAsync() {
       lightColor: '#1A3FFF',
       lockscreenVisibility: 1, // PUBLIC
       showBadge: true,
-      enableVibration: true,
       sound: 'default' 
     });
   }
@@ -55,7 +54,12 @@ export async function registerForPushNotificationsAsync() {
         projectId
       })).data;
     } catch (e: any) {
-      console.error('[Notifications] Error getting token:', e.message);
+      // ⚠️ Expo Go SDK 53+ does not support push tokens on Android
+      if (Constants.appOwnership === 'expo' && Platform.OS === 'android') {
+         console.warn('[Notifications] Push tokens are NOT supported in Expo Go on Android. Use a Development Build.');
+      } else {
+         console.error('[Notifications] Error getting token:', e.message);
+      }
     }
 
   } else {
@@ -71,8 +75,16 @@ export async function registerForPushNotificationsAsync() {
           .update({ expo_push_token: token })
           .eq('id', user.id);
 
-        if (error) throw error;
-        console.log('[Notifications] Token saved to profile.');
+        if (error) {
+           // Specifically detect the missing column error to provide better feedback
+           if (error.message?.includes('column') && error.message?.includes('expo_push_token')) {
+              console.error('[Notifications] DATABASE SCHEMA MISMATCH: The "expo_push_token" column is missing from "profiles" table.');
+           } else {
+              throw error;
+           }
+        } else {
+          console.log('[Notifications] Token successfully synced with backend.');
+        }
       }
     } catch (err: any) {
       console.error('[Notifications] Failed to sync token with backend:', err.message);
