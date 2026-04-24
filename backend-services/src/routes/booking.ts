@@ -117,66 +117,152 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
 
             // 🔥 Inline dispatch: Call dispatch_job RPC directly (works without Redis)
             // This ensures providers get notified even when Redis/EventBus is down
+            // 🔥 Production-Ready Robust Dispatch
             try {
+                let offersCreated = 0;
+                let offers: any[] = [];
+
+                // 1. Try RPC first
                 const { data: dispatchCount, error: dispatchError } = await supabaseAdmin
                     .rpc('dispatch_job', { p_booking_id: data.id });
 
                 if (dispatchError) {
-                    fastify.log.error({ error: dispatchError.message, bookingId: data.id }, '[Booking] Inline dispatch_job RPC failed');
-                } else {
-                    fastify.log.info({ bookingId: data.id, offers: dispatchCount }, '[Booking] Inline dispatch created offers');
+                    fastify.log.error({ error: dispatchError.message, bookingId: data.id }, '[Booking] dispatch_job RPC failed. Falling back to manual dispatch.');
+                    
+                    // FALLBACK: Manual Provider Search (Haversine in JS)
+                    const v_max_radius = 20.0;
+                    const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
 
-                    // Notify providers via socket (inline, no Redis dependency)
-                    const { data: offers } = await supabaseAdmin
+                    // Fetch eligible providers
+                    const { data: eligibleProviders } = await supabaseAdmin
+                        .from('provider_details')
+                        .select(`
+                            provider_id,
+                            is_online,
+                            verification_status,
+                            provider_locations!inner(latitude, longitude, recorded_at),
+                            provider_services!inner(subcategory_id, is_active)
+                        `)
+                        .eq('is_online', true)
+                        .eq('verification_status', 'verified')
+                        .eq('provider_services.subcategory_id', body.subcategoryId)
+                        .eq('provider_services.is_active', true)
+                        .gt('provider_locations.recorded_at', fourHoursAgo);
+
+                    if (eligibleProviders && eligibleProviders.length > 0) {
+                        const calculateDist = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+                            const R = 6371;
+                            const dLat = (lat2 - lat1) * Math.PI / 180;
+                            const dLon = (lon2 - lon1) * Math.PI / 180;
+                            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+                            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                        };
+
+                        const providersInRange = eligibleProviders
+                            .map((p: any) => ({
+                                ...p,
+                                distance: calculateDist(body.customerLatitude, body.customerLongitude, p.provider_locations.latitude, p.provider_locations.longitude)
+                            }))
+                            .filter(p => p.distance < v_max_radius)
+                            .sort((a, b) => a.distance - b.distance)
+                            .slice(0, 15);
+
+                        if (providersInRange.length > 0) {
+                            // Insert offers manually
+                            const offerInserts = providersInRange.map(p => ({
+                                booking_id: data.id,
+                                provider_id: p.provider_id,
+                                distance_km: p.distance,
+                                expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+                                status: 'pending'
+                            }));
+
+                            const { data: createdOffers, error: offerErr } = await supabaseAdmin
+                                .from('job_offers')
+                                .insert(offerInserts)
+                                .select('id, provider_id');
+
+                            if (!offerErr && createdOffers) {
+                                offersCreated = createdOffers.length;
+                                offers = createdOffers;
+                                // Update booking status to searching
+                                await supabaseAdmin.from('bookings').update({ status: 'searching' }).eq('id', data.id);
+                            }
+                        } else {
+                            // No providers in range -> cancel
+                            await supabaseAdmin.from('bookings').update({ 
+                                status: 'cancelled', 
+                                cancellation_reason: 'No worker found in range (Manual Fallback)' 
+                            }).eq('id', data.id);
+                        }
+                    } else {
+                        // No eligible providers -> cancel
+                        await supabaseAdmin.from('bookings').update({ 
+                            status: 'cancelled', 
+                            cancellation_reason: 'No online workers found (Manual Fallback)' 
+                        }).eq('id', data.id);
+                    }
+                } else {
+                    offersCreated = dispatchCount || 0;
+                    // Fetch offers created by RPC
+                    const { data: rpcOffers } = await supabaseAdmin
                         .from('job_offers')
                         .select('id, provider_id')
                         .eq('booking_id', data.id)
                         .eq('status', 'pending');
+                    offers = rpcOffers || [];
+                }
 
-                    if (offers && offers.length > 0) {
-                        const { emitToUser } = await import('../socket');
-                        for (const offer of offers) {
-                            // 1. Persist notification in DB
-                            // NOTE: `type` column is NOT NULL in the notifications table
+                // 2. Notify providers (with robustness for missing columns)
+                if (offers.length > 0) {
+                    const { emitToUser } = await import('../socket');
+                    for (const offer of offers) {
+                        const notificationData = {
+                            type: 'new_job',
+                            bookingId: data.id,
+                            offerId: offer.id,
+                            amount: body.totalAmount,
+                            service: body.serviceNameSnapshot,
+                            serviceName: body.serviceNameSnapshot,
+                            address: body.customerAddress,
+                            customer_address: body.customerAddress
+                        };
+
+                        // TRY 1: Full insert with type
+                        const { error: notifErr } = await supabaseAdmin.from('notifications').insert({
+                            user_id: offer.provider_id,
+                            title: 'New Service Request! 🚀',
+                            body: `${body.serviceNameSnapshot || 'New Job'} available now.`,
+                            type: 'new_job',
+                            data: notificationData,
+                            is_read: false
+                        });
+
+                        // FALLBACK: If type column missing, insert without it (type is in data for frontend)
+                        if (notifErr && notifErr.message?.includes('column "type" does not exist')) {
                             await supabaseAdmin.from('notifications').insert({
                                 user_id: offer.provider_id,
-                                title: 'New Service Request! ',
+                                title: 'New Service Request! 🚀',
                                 body: `${body.serviceNameSnapshot || 'New Job'} available now.`,
-                                type: 'new_job', // ← REQUIRED: was missing, causing insert failure
-                                data: {
-                                    type: 'new_job',
-                                    bookingId: data.id,
-                                    offerId: offer.id,
-                                    amount: body.totalAmount,
-                                    service: body.serviceNameSnapshot,    // normalized key
-                                    serviceName: body.serviceNameSnapshot, // keep both for compat
-                                    address: body.customerAddress,
-                                    customer_address: body.customerAddress // keep both for compat
-                                },
+                                data: notificationData,
                                 is_read: false
                             });
-
-                            // 2. Emit socket event for instant popup
-                            emitToUser(offer.provider_id, 'notification:alert', {
-                                title: 'New Service Request! ',
-                                body: `${body.serviceNameSnapshot || 'New Job'} available now.`,
-                                type: 'new_job', // consistent TYPE casing
-                                data: {
-                                    bookingId: data.id,
-                                    offerId: offer.id,
-                                    amount: body.totalAmount,
-                                    service: body.serviceNameSnapshot,    // normalized key
-                                    serviceName: body.serviceNameSnapshot, // keep both for compat
-                                    address: body.customerAddress,
-                                    customer_address: body.customerAddress // keep both for compat
-                                }
-                            });
                         }
-                        fastify.log.info({ bookingId: data.id, providers: offers.length }, '[Booking] Notified providers via inline dispatch');
+
+                        // 3. Socket Emit (Independent of DB schema)
+                        emitToUser(offer.provider_id, 'notification:alert', {
+                            title: 'New Service Request! 🚀',
+                            body: `${body.serviceNameSnapshot || 'New Job'} available now.`,
+                            type: 'new_job',
+                            data: notificationData
+                        });
                     }
+                    fastify.log.info({ bookingId: data.id, providers: offers.length }, '[Booking] Notified providers successfully');
                 }
             } catch (dispatchErr: any) {
-                fastify.log.error({ error: dispatchErr.message }, '[Booking] Inline dispatch failed');
+                fastify.log.error({ error: dispatchErr.message }, '[Booking] Dispatch lifecycle failure');
             }
 
             // Also try EventBus (non-blocking, for nudge scheduling etc.)

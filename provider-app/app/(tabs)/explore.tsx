@@ -52,7 +52,7 @@ export default function JobMarketplace() {
       // 1. Check Busy Status from Profile /api/v1/providers/me
       const { data: profile, error: profErr } = await api.get('/api/v1/providers/me');
       if (profErr) throw new Error(profErr);
-      
+
       if (profile?.hasActiveJob) {
         setIsBusy(true);
         setActiveJobId(profile.activeJobId);
@@ -73,17 +73,17 @@ export default function JobMarketplace() {
       });
 
       if (error) {
-         console.error('[Marketplace] RPC get_available_jobs error:', error);
-         throw error;
+        console.error('[Marketplace] RPC get_available_jobs error:', error);
+        throw error;
       }
-      
+
       console.log(`[Marketplace] Found ${data?.length || 0} jobs for provider ${user.id}`);
       setJobs(data || []);
     } catch (e: any) {
       console.error('Marketplace Error Details:', {
-         message: e.message,
-         details: e.details,
-         hint: e.hint
+        message: e.message,
+        details: e.details,
+        hint: e.hint
       });
       Alert.alert('Error', 'Failed to load available jobs. Please try refreshing.');
     } finally {
@@ -184,9 +184,9 @@ export default function JobMarketplace() {
             <Text style={s.busySub}>
               To ensure quality service, you can only handle one job at a time. Finish your current task to see more.
             </Text>
-            
-            <TouchableOpacity 
-              style={s.activeJobBtn} 
+
+            <TouchableOpacity
+              style={s.activeJobBtn}
               onPress={() => router.push(`/track/${activeJobId}` as any)}
             >
               <Text style={s.activeJobBtnText}>Go to Active Job</Text>
@@ -210,7 +210,7 @@ export default function JobMarketplace() {
                 <RefreshControl refreshing={loading} onRefresh={fetchAvailableJobs} tintColor={PRIMARY} />
               }
               ListEmptyComponent={
-                <EmptyState 
+                <EmptyState
                   title="No Jobs Available"
                   description="We'll notify you when new tasks arrive in your area. Check back soon!"
                   imageSource={require('../../assets/images/search-empty.png')}
