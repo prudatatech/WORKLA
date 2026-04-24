@@ -20,7 +20,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 
-const PRIMARY = '#1A3FFF';
 const GOLD = '#D97706';
 const GOLD_LIGHT = '#FEF3C7';
 const GOLD_DARK = '#92400E';
@@ -131,7 +130,7 @@ export default function WorklaGoldScreen() {
                 Animated.timing(crownBob, { toValue: 0, duration: 700, useNativeDriver: true }),
             ])
         ).start();
-    }, []);
+    }, [crownBob, shimmerAnim]);
 
     const plan = PLANS.find(p => p.id === selectedPlan)!;
 

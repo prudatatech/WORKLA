@@ -4,7 +4,6 @@ import { StatusBar } from 'expo-status-bar';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus, Platform } from 'react-native';
-import { Buffer } from 'buffer';
 import NetworkBanner from '../components/NetworkBanner';
 import InAppToast from '../components/InAppToast';
 import LoadingScreen from '../components/LoadingScreen';
@@ -18,7 +17,10 @@ const IS_EXPO_GO_ANDROID =
 
 const getNotifications = () => {
   if (IS_EXPO_GO_ANDROID) return null;
-  try { return require('expo-notifications'); } catch { return null; }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('expo-notifications');
+  } catch { return null; }
 };
 
 // Keep the splash screen visible while we fetch resources
@@ -110,7 +112,7 @@ export default function RootLayout() {
     return () => {
       if (notifResponseRef.current) Notifs.removeNotificationSubscription(notifResponseRef.current);
     };
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     const checkSession = async () => {
@@ -137,13 +139,14 @@ export default function RootLayout() {
   useEffect(() => {
     if (!initialized) return;
 
-    const inAuthGroup = segments[0] === 'auth' || segments[0] === 'index' || segments[0] === 'onboarding' || segments[0] === undefined;
+    const rootSegment = segments[0] as string;
+    const inAuthGroup = rootSegment === 'auth' || rootSegment === 'index' || rootSegment === 'onboarding' || rootSegment === undefined;
 
     if (session && inAuthGroup) {
       // User is logged in but on a non-authenticated screen — redirect to home
       router.replace('/(tabs)');
     }
-  }, [session?.user?.id, initialized, segments[0]]);
+  }, [session, initialized, segments, router]);
 
   // 🛡️ AppState lifecycle: pause/resume realtime when app backgrounds/foregrounds
   useEffect(() => {
@@ -242,6 +245,10 @@ export default function RootLayout() {
     setToast({ visible: true, title, body, type });
   };
 
+  const handleToastDismiss = useCallback(() => {
+    setToast(prev => ({ ...prev, visible: false }));
+  }, []);
+
   if (!initialized) {
     return <LoadingScreen />;
   }
@@ -276,7 +283,7 @@ export default function RootLayout() {
         title={toast.title}
         body={toast.body}
         type={toast.type}
-        onDismiss={() => setToast(prev => ({ ...prev, visible: false }))}
+        onDismiss={handleToastDismiss}
       />
     </>
   );

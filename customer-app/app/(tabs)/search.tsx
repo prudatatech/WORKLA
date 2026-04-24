@@ -16,7 +16,6 @@ import {
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
     Dimensions,
     Image,
     RefreshControl,

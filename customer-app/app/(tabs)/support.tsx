@@ -4,7 +4,6 @@ import { ArrowLeft, ChevronRight, HelpCircle, Mail, MessageSquare, Phone } from 
 import React, { useState } from 'react';
 import {
     Linking,
-    Platform,
     ScrollView,
     StatusBar,
     StyleSheet,

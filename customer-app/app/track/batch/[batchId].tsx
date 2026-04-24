@@ -57,7 +57,7 @@ export default function BatchTrackScreen() {
         .subscribe()
     );
     return () => { channels.forEach(c => supabase.removeChannel(c)); };
-  }, [batchId, bookings.length]);
+  }, [batchId, bookings]);
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -107,7 +107,7 @@ export default function BatchTrackScreen() {
                     <Text style={styles.cancelledEmoji}>😔</Text>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.cancelledTitle}>No providers available</Text>
-                      <Text style={styles.cancelledSub}>We couldn't find a worker nearby for this service.</Text>
+                      <Text style={styles.cancelledSub}>We couldn&apos;t find a worker nearby for this service.</Text>
                     </View>
                   </View>
                 ) : (

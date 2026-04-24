@@ -15,7 +15,7 @@ import {
     Tag,
     Zap
 } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -81,13 +81,47 @@ export default function RequestServiceScreen() {
         tax_rate: 0.18
     });
 
-    useEffect(() => {
-        fetchData();
-        fetchCoupons();
-        fetchGoldStatus();
+    const fetchGoldStatus = useCallback(async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data: profile } = await supabase.from('profiles').select('is_gold').eq('id', user.id).single();
+        if (profile) setIsGold(!!profile.is_gold);
     }, []);
 
-    const checkExistingDraft = async (srvs: any[], subs: any[]) => {
+    const fetchCoupons = useCallback(async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // Fetch active coupons
+        const { data: availableCoupons } = await supabase
+            .from('coupons')
+            .select('*')
+            .eq('is_active', true)
+            .gte('valid_till', new Date().toISOString());
+
+        // Fetch used coupons by this user
+        const { data: usedCoupons } = await supabase
+            .from('coupon_usages')
+            .select('coupon_id')
+            .eq('customer_id', user.id);
+
+        const usedIds = usedCoupons?.map(u => u.coupon_id) || [];
+        const validUnused = availableCoupons?.filter(c => !usedIds.includes(c.id)) || [];
+        setCoupons(validUnused);
+    }, []);
+
+    const fetchSettings = async () => {
+        const { data } = await supabase.from('system_settings').select('key, value_numeric');
+        if (data) {
+            const mapped = data.reduce((acc: any, curr: any) => {
+                acc[curr.key] = Number(curr.value_numeric);
+                return acc;
+            }, {});
+            setSettings(prev => ({ ...prev, ...mapped }));
+        }
+    };
+
+    const checkExistingDraft = useCallback(async (srvs: any[], subs: any[]) => {
         try {
             if (resume !== 'true' || !draftId) return;
 
@@ -123,76 +157,9 @@ export default function RequestServiceScreen() {
         } catch (e) {
             console.error("Error checking drafts", e);
         }
-    };
+    }, [draftId, resume]);
 
-    const saveDraft = async (targetStep?: Step) => {
-        const steps: Step[] = ['trade', 'task', 'details', 'confirm'];
-        const stepIndex = targetStep ? steps.indexOf(targetStep) : steps.indexOf(step);
-        
-        if (!selectedService || !selectedSubcategory) return;
-
-        try {
-            await api.post('/api/v1/drafts', {
-                serviceId: selectedSubcategory.id,
-                currentStep: stepIndex + 1,
-                totalSteps: steps.length,
-                formData: {
-                    selectedServiceId: selectedService.id,
-                    selectedSubcategoryId: selectedSubcategory.id,
-                    description,
-                    selectedDate,
-                    selectedSlot,
-                    selectedPaymentMethod,
-                    selectedFrequency,
-                    selectedAddressId: selectedAddress?.id
-                }
-            });
-        } catch (e) {
-            console.error("Draft save failed", e);
-        }
-    };
-
-    const fetchGoldStatus = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        const { data: profile } = await supabase.from('profiles').select('is_gold').eq('id', user.id).single();
-        if (profile) setIsGold(!!profile.is_gold);
-    };
-
-    const fetchCoupons = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        // Fetch active coupons
-        const { data: availableCoupons } = await supabase
-            .from('coupons')
-            .select('*')
-            .eq('is_active', true)
-            .gte('valid_till', new Date().toISOString());
-
-        // Fetch used coupons by this user
-        const { data: usedCoupons } = await supabase
-            .from('coupon_usages')
-            .select('coupon_id')
-            .eq('customer_id', user.id);
-
-        const usedIds = usedCoupons?.map(u => u.coupon_id) || [];
-        const validUnused = availableCoupons?.filter(c => !usedIds.includes(c.id)) || [];
-        setCoupons(validUnused);
-    };
-
-    const fetchSettings = async () => {
-        const { data } = await supabase.from('system_settings').select('key, value_numeric');
-        if (data) {
-            const mapped = data.reduce((acc: any, curr: any) => {
-                acc[curr.key] = Number(curr.value_numeric);
-                return acc;
-            }, {});
-            setSettings(prev => ({ ...prev, ...mapped }));
-        }
-    };
-
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         setLoading(true);
         fetchSettings();
         const { data: srvs } = await supabase.from('services').select('*').eq('is_active', true).order('priority_number', { ascending: false }).order('name', { ascending: true });
@@ -223,6 +190,39 @@ export default function RequestServiceScreen() {
         checkExistingDraft(srvs || [], subs || []);
         
         setLoading(false);
+    }, [checkExistingDraft, service, subservice]);
+
+    useEffect(() => {
+        fetchData();
+        fetchCoupons();
+        fetchGoldStatus();
+    }, [fetchData, fetchCoupons, fetchGoldStatus]);
+
+    const saveDraft = async (targetStep?: Step) => {
+        const steps: Step[] = ['trade', 'task', 'details', 'confirm'];
+        const stepIndex = targetStep ? steps.indexOf(targetStep) : steps.indexOf(step);
+        
+        if (!selectedService || !selectedSubcategory) return;
+
+        try {
+            await api.post('/api/v1/drafts', {
+                serviceId: selectedSubcategory.id,
+                currentStep: stepIndex + 1,
+                totalSteps: steps.length,
+                formData: {
+                    selectedServiceId: selectedService.id,
+                    selectedSubcategoryId: selectedSubcategory.id,
+                    description,
+                    selectedDate,
+                    selectedSlot,
+                    selectedPaymentMethod,
+                    selectedFrequency,
+                    selectedAddressId: selectedAddress?.id
+                }
+            });
+        } catch (e) {
+            console.error("Draft save failed", e);
+        }
     };
 
     const getEstimate = () => {
@@ -317,6 +317,7 @@ export default function RequestServiceScreen() {
                 // 🛑 CRITICAL NATIVE CHECK
                 // Since react-native-razorpay depends on native code, it will NOT work in standard Expo Go.
                 // We check if the module is available to prevent a crash.
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const { NativeModules: RNModules } = require('react-native');
                 if (!RNModules.RNRazorpayCheckout) {
                     Alert.alert(

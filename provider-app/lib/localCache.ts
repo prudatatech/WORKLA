@@ -52,7 +52,7 @@ export const localCache = {
         }
     },
 
-    async remove(key: string): Promise<void> {
+    async removeItem(key: string): Promise<void> {
         try {
             await AsyncStorage.removeItem(PREFIX + key);
         } catch {}

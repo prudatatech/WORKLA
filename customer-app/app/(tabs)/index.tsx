@@ -237,7 +237,7 @@ export default function HomeScreen() {
                 }
               }
             }
-          } catch (gpsErr) {
+          } catch {
             // GPS unavailable (device off, emulator, permission revoked) — silently skip
             console.warn('[Home] GPS unavailable, skipping location update');
           }
@@ -315,7 +315,7 @@ export default function HomeScreen() {
       .subscribe();
 
     realtimeChannelRef.current = channel;
-  }, [bannerSlide, loadData]);
+  }, [bannerSlide, loadData, activeBookings.length]);
 
   // Sync refs
   subscribeRef.current = subscribeToBookingUpdates;
@@ -381,7 +381,6 @@ export default function HomeScreen() {
 
     const sub = AppState.addEventListener('change', handleAppStateChange);
     return () => sub.remove();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Refresh data when screen comes into focus — debounced to 2 minutes
@@ -393,7 +392,6 @@ export default function HomeScreen() {
         lastLoadTimeRef.current = now;
         loadDataRef.current();
       }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
   );
 
@@ -410,7 +408,6 @@ export default function HomeScreen() {
       if (pulseAnimRef.current) pulseAnimRef.current.stop();
       if (realtimeChannelRef.current) supabase.removeChannel(realtimeChannelRef.current);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const dismissBanner = () => {

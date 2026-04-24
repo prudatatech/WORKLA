@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Animated, Text, View, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 
 interface ToastProps {
@@ -20,11 +20,20 @@ const COLORS: Record<string, { bg: string; border: string; title: string; icon: 
 export default function InAppToast({ visible, title, body, type = 'info', duration = 4000, onDismiss }: ToastProps) {
     const translateY = useRef(new Animated.Value(-120)).current;
     const opacity = useRef(new Animated.Value(0)).current;
-    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const timeoutRef = useRef<any>(null);
+
+    const dismiss = useCallback(() => {
+        Animated.parallel([
+            Animated.timing(translateY, { toValue: -120, duration: 250, useNativeDriver: true }),
+            Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+        ]).start(() => onDismiss());
+    }, [onDismiss, opacity, translateY]);
+
+    const prevVisibleRef = useRef(visible);
 
     useEffect(() => {
-        if (visible) {
-            // Slide in
+        if (visible && !prevVisibleRef.current) {
+            // SLIDE IN: transitioned from hidden -> visible
             Animated.parallel([
                 Animated.spring(translateY, { toValue: 0, useNativeDriver: true, tension: 80, friction: 12 }),
                 Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
@@ -35,21 +44,17 @@ export default function InAppToast({ visible, title, body, type = 'info', durati
             timeoutRef.current = setTimeout(() => {
                 dismiss();
             }, duration);
-        } else {
+        } else if (!visible && prevVisibleRef.current) {
+            // SLIDE OUT: transitioned from visible -> hidden
             dismiss();
         }
+
+        prevVisibleRef.current = visible;
 
         return () => {
             if (timeoutRef.current) clearTimeout(timeoutRef.current);
         };
-    }, [visible]);
-
-    const dismiss = () => {
-        Animated.parallel([
-            Animated.timing(translateY, { toValue: -120, duration: 250, useNativeDriver: true }),
-            Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-        ]).start(() => onDismiss());
-    };
+    }, [visible, dismiss, duration, opacity, translateY]);
 
     if (!visible && !title) return null;
 

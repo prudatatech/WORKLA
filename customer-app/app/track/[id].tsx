@@ -54,11 +54,11 @@ const STATUS_LABELS: Record<string, { title: string; sub: string; color: string 
     disputed: { title: '⚠️ Disputed', sub: 'This job is under review', color: '#E11D48' },
 };
 
-const QUICK_ACTIONS = [
-    { key: 'chat', label: 'Chat', Icon: MessageSquare },
-    { key: 'call', label: 'Call', Icon: Phone },
-    { key: 'safety', label: 'Safety', Icon: Shield },
-];
+// const QUICK_ACTIONS = [
+//     { key: 'chat', label: 'Chat', Icon: MessageSquare },
+//     { key: 'call', label: 'Call', Icon: Phone },
+//     { key: 'safety', label: 'Safety', Icon: Shield },
+// ];
 
 export default function TrackingScreen() {
     const { id: rawId } = useLocalSearchParams();
@@ -168,7 +168,7 @@ export default function TrackingScreen() {
         }, 15000); // Increased from 5s to 15s for lower bandwidth usage
 
         return () => clearInterval(interval);
-    }, [id, booking?.status, loadBooking]);
+    }, [id, booking, loadBooking]);
 
     // 🕒 5-Minute Search Timeout Logic
     useEffect(() => {
