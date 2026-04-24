@@ -71,6 +71,7 @@ export default function RequestServiceScreen() {
     const [selectedSlot, setSelectedSlot] = useState<typeof TIME_SLOTS[0]>(TIME_SLOTS[0]);
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'cod' | 'online'>('cod');
     const [submitting, setSubmitting] = useState(false);
+    const [activeDraftId, setActiveDraftId] = useState<string | null>(draftId || null);
     const [coupons, setCoupons] = useState<any[]>([]);
     const [selectedCoupon, setSelectedCoupon] = useState<any>(null);
     const [selectedFrequency, setSelectedFrequency] = useState<'one_time' | 'daily' | 'weekly'>('one_time');
@@ -205,7 +206,7 @@ export default function RequestServiceScreen() {
         if (!selectedService || !selectedSubcategory) return;
 
         try {
-            await api.post('/api/v1/drafts', {
+            const res = await api.post('/api/v1/drafts', {
                 serviceId: selectedSubcategory.id,
                 currentStep: stepIndex + 1,
                 totalSteps: steps.length,
@@ -220,6 +221,9 @@ export default function RequestServiceScreen() {
                     selectedAddressId: selectedAddress?.id
                 }
             });
+            if (res.data?.id) {
+                setActiveDraftId(res.data.id);
+            }
         } catch (e) {
             console.error("Draft save failed", e);
         }
@@ -391,8 +395,9 @@ export default function RequestServiceScreen() {
             }
 
             // Cleanup draft if it exists
-            if (draftId) {
-                await api.delete(`/api/v1/drafts/${draftId}`).catch(() => {});
+            if (activeDraftId) {
+                await api.delete(`/api/v1/drafts/${activeDraftId}`).catch(() => {});
+                setActiveDraftId(null);
             }
 
             router.replace(`/track/${bookingId}` as any);

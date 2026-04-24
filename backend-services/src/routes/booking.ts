@@ -104,6 +104,13 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
                 .single();
 
             if (error) throw error;
+            
+            // 🧹 Cleanup any existing draft for this user + subcategory
+            await supabaseAdmin
+                .from('booking_drafts')
+                .delete()
+                .eq('user_id', user.sub)
+                .eq('service_id', body.subcategoryId);
 
             // 🎟️ Track coupon usage if applicable
             if (body.couponId) {
