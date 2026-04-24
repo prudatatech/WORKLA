@@ -76,18 +76,39 @@ export default function ConfigureBucketScreen() {
       };
 
       const res = await api.post('/api/v1/bookings/batch', payload);
+
+      // 🗺️ Area not served — guide user to change address
+      if ((res as any)?.error === 'AREA_NOT_SERVED') {
+        Alert.alert(
+          '📍 Area Not Covered',
+          'We don\'t serve this location yet. Please select a different address.',
+          [{ text: 'Change Address', onPress: () => router.push('/addresses?selectable=true' as any) }, { text: 'Cancel', style: 'cancel' }]
+        );
+        return;
+      }
+
       if (res.error || !res.data) throw new Error(res.error || 'Booking failed');
 
       clearBucket();
 
-      const { batchId, bookingIds } = res.data;
+      const { batchId, bookingIds, failed } = res.data;
+
+      // ⚠️ Partial failure notice — some services found providers, some didn't
+      if (failed > 0 && bookingIds.length > 0) {
+        Alert.alert(
+          '⚠️ Partial Booking',
+          `${bookingIds.length} service${bookingIds.length > 1 ? 's' : ''} booked successfully. ${failed} couldn't find a provider right now and has been cancelled.`,
+          [{ text: 'View Details', style: 'default' }]
+        );
+      }
+
       if (bookingIds.length === 1) {
         router.replace(`/track/${bookingIds[0]}` as any);
       } else {
         router.replace(`/track/batch/${batchId}` as any);
       }
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Something went wrong');
+      Alert.alert('Something went wrong', err.message || 'Please try again.');
     } finally {
       setSubmitting(false);
     }

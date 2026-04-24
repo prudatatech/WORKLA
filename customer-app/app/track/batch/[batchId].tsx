@@ -79,36 +79,49 @@ export default function BatchTrackScreen() {
           {bookings.map((booking, idx) => {
             const meta = STATUS_META[booking.status] ?? STATUS_META['searching'];
             const accent = CARD_COLORS[idx % CARD_COLORS.length];
+            const isCancelled = booking.status === 'cancelled';
+
             return (
-              <TouchableOpacity
-                key={booking.id}
-                style={[styles.card, { borderLeftColor: accent }]}
-                activeOpacity={0.85}
-                onPress={() => router.push({ pathname: '/track/[id]', params: { id: booking.id } } as any)}
-              >
+              <View key={booking.id} style={[styles.card, { borderLeftColor: isCancelled ? '#D1D5DB' : accent, opacity: isCancelled ? 0.75 : 1 }]}>
                 <View style={styles.cardTop}>
-                  <View style={[styles.indexBadge, { backgroundColor: accent }]}>
+                  <View style={[styles.indexBadge, { backgroundColor: isCancelled ? '#9CA3AF' : accent }]}>
                     <Text style={styles.indexText}>{idx + 1}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.serviceName}>{booking.service_name_snapshot}</Text>
+                    <Text style={[styles.serviceName, isCancelled && { color: '#9CA3AF' }]}>{booking.service_name_snapshot}</Text>
                     <Text style={styles.bookingNum}>#{booking.booking_number}</Text>
                   </View>
-                  <View style={styles.trackBtn}>
-                    <Navigation size={13} color="#FFF" />
-                    <Text style={styles.trackBtnText}>Track</Text>
-                  </View>
+                  {!isCancelled && (
+                    <TouchableOpacity
+                      style={styles.trackBtn}
+                      onPress={() => router.push({ pathname: '/track/[id]', params: { id: booking.id } } as any)}
+                    >
+                      <Navigation size={13} color="#FFF" />
+                      <Text style={styles.trackBtnText}>Track</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
 
-                <View style={[styles.statusStrip, { backgroundColor: `${meta.color}12` }]}>
-                  <Text style={styles.statusEmoji}>{meta.emoji}</Text>
-                  <Text style={[styles.statusText, { color: meta.color }]}>{meta.label}</Text>
-                  <View style={{ flex: 1 }} />
-                  <Text style={styles.amountText}>₹{Math.round(booking.total_amount)}</Text>
-                </View>
-              </TouchableOpacity>
+                {isCancelled ? (
+                  <View style={styles.cancelledStrip}>
+                    <Text style={styles.cancelledEmoji}>😔</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.cancelledTitle}>No providers available</Text>
+                      <Text style={styles.cancelledSub}>We couldn't find a worker nearby for this service.</Text>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={[styles.statusStrip, { backgroundColor: `${meta.color}12` }]}>
+                    <Text style={styles.statusEmoji}>{meta.emoji}</Text>
+                    <Text style={[styles.statusText, { color: meta.color }]}>{meta.label}</Text>
+                    <View style={{ flex: 1 }} />
+                    <Text style={styles.amountText}>₹{Math.round(booking.total_amount)}</Text>
+                  </View>
+                )}
+              </View>
             );
           })}
+
 
           <View style={{ height: 40 }} />
         </ScrollView>
@@ -149,4 +162,9 @@ const styles = StyleSheet.create({
   statusEmoji: { fontSize: 14 },
   statusText: { fontSize: 13, fontWeight: '700' },
   amountText: { fontSize: 14, fontWeight: '800', color: '#111827' },
+  cancelledStrip: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#F9FAFB' },
+  cancelledEmoji: { fontSize: 20 },
+  cancelledTitle: { fontSize: 13, fontWeight: '700', color: '#6B7280' },
+  cancelledSub: { fontSize: 11, color: '#9CA3AF', marginTop: 2 },
+
 });

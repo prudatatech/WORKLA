@@ -769,6 +769,21 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
         }
 
         try {
+            // 🗺️ Geo-fencing check: Is this area served? (Using the first item's coordinates)
+            const { data: isServed, error: zoneError } = await supabaseAdmin
+                .rpc('is_location_in_service_zone', {
+                    p_lat: body.items[0].customerLatitude,
+                    p_lng: body.items[0].customerLongitude
+                });
+
+            if (zoneError) throw zoneError;
+            if (!isServed) {
+                return reply.code(400).send({
+                    error: 'AREA_NOT_SERVED',
+                    details: 'Sorry, we do not provide services in this area yet.'
+                } as any);
+            }
+
             const batchId = crypto.randomUUID();
 
             // Create all bookings in parallel
@@ -805,11 +820,24 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
                     if (error) throw error;
 
                     // Dispatch each independently (non-blocking)
-                    supabaseAdmin.rpc('dispatch_job', { p_booking_id: data.id })
-                        .then(({ data: count }) => {
-                            fastify.log.info({ bookingId: data.id, offers: count }, '[Batch] Dispatched');
-                        })
-                        .catch((e) => fastify.log.error({ err: e.message, bookingId: data.id }, '[Batch] Dispatch failed'));
+                    (async () => {
+                        try {
+                            const { data: count, error: dispatchErr } = await supabaseAdmin.rpc('dispatch_job', { p_booking_id: data.id });
+                            
+                            if (dispatchErr || !count || count === 0) {
+                                // If no providers found or dispatch fails, auto-cancel this specific booking in the batch
+                                await supabaseAdmin.from('bookings').update({ 
+                                    status: 'cancelled', 
+                                    cancellation_reason: 'No workers available in your area for this service at the moment.' 
+                                }).eq('id', data.id);
+                                fastify.log.info({ bookingId: data.id }, '[Batch] Auto-cancelled: No providers found');
+                            } else {
+                                fastify.log.info({ bookingId: data.id, offers: count }, '[Batch] Dispatched successfully');
+                            }
+                        } catch (e: any) {
+                            fastify.log.error({ err: e.message, bookingId: data.id }, '[Batch] Dispatch failed');
+                        }
+                    })();
 
                     return data;
                 })
