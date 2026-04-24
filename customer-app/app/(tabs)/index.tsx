@@ -71,7 +71,7 @@ export default function HomeScreen() {
 
   // ── Animation ──
   const notifPulse = useRef(new Animated.Value(1)).current;
-  const bannerSlide = useRef(new Animated.Value(-80)).current;
+  const bannerSlide = useRef(new Animated.Value(150)).current; // 150 = Hidden below
   const sectionRefs = useRef<Record<string, number>>({ all: 0, popular: 0, smart: 0, recommended: 0 });
   const scrollToSection = (key: string) => scrollRef.current?.scrollTo({ y: sectionRefs.current[key] ?? 0, animated: true });
 
@@ -215,32 +215,26 @@ export default function HomeScreen() {
           }
           if (Array.isArray(draftRes.data)) setDrafts(draftRes.data);
 
-          // GPS & Addresses — safe, never throws
+          // 🚀 REMOVED: Automatic GPS detection on every load. 
+          // We now rely on persisted 'selectedAddress' from useAddressStore.
+          // This saves battery and respects the user's manually chosen location.
+          /* 
           try {
             const { status } = await Location.requestForegroundPermissionsAsync();
             if (status === 'granted') {
-              // Use last known first (instant, no GPS hang). Fall back to current only if needed.
               let loc = await Location.getLastKnownPositionAsync({});
-              if (!loc) {
-                loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-              }
+              if (!loc) loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
               if (loc) {
                 const savedAddrs = (addressRes.data || []).map((a: any) => ({
                   id: a.id, label: a.label, name: a.name, address: a.full_address, latitude: a.latitude, longitude: a.longitude
                 }));
                 autoDetectAddress(loc.coords.latitude, loc.coords.longitude, savedAddrs);
-                if (meRes.data?.data && !meRes.data.data.city) {
-                  const rev = await Location.reverseGeocodeAsync({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-                  if (rev[0]?.city) {
-                    await supabase.from('profiles').update({ city: rev[0].city, preferred_location_lat: loc.coords.latitude, preferred_location_lng: loc.coords.longitude }).eq('id', user.id);
-                  }
-                }
               }
             }
           } catch {
-            // GPS unavailable (device off, emulator, permission revoked) — silently skip
             console.warn('[Home] GPS unavailable, skipping location update');
           }
+          */
         } catch (phase2Err) {
           console.error('Background error:', phase2Err);
         }
@@ -303,7 +297,7 @@ export default function HomeScreen() {
             } else if (booking.status === 'completed' || booking.status === 'cancelled') {
               setActiveBookings(prev => prev.filter(b => b.id !== booking.id));
               if (activeBookings.length <= 1) {
-                Animated.timing(bannerSlide, { toValue: -80, useNativeDriver: true, duration: 200 }).start();
+                Animated.timing(bannerSlide, { toValue: 150, useNativeDriver: true, duration: 200 }).start();
               }
               if (booking.status === 'completed') {
                 loadData(); 
@@ -412,7 +406,7 @@ export default function HomeScreen() {
 
   const dismissBanner = () => {
     isBannerDismissedThisSession = true;
-    Animated.timing(bannerSlide, { toValue: -80, useNativeDriver: true, duration: 200 }).start(() => setActiveBookings([]));
+    Animated.timing(bannerSlide, { toValue: 150, useNativeDriver: true, duration: 200 }).start(() => setActiveBookings([]));
   };
 
   return (

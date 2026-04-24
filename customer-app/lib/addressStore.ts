@@ -38,7 +38,7 @@ export const useAddressStore = create<AddressState>()(
     persist(
         (set, get) => ({
             selectedAddress: null,
-            rawLocationName: 'Detecting location...',
+            rawLocationName: 'Please select location',
 
             setSelectedAddress: (address) => set({ selectedAddress: address }),
             setRawLocationName: (name) => set({ rawLocationName: name }),

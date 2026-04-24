@@ -129,10 +129,12 @@ export default function ProviderHomeScreen() {
     if (!user) return;
 
     const { data: sp } = await supabase.from('provider_details').select('is_online, avg_rating, business_name').eq('provider_id', user.id).maybeSingle();
+    const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle();
     if (sp) {
       setIsOnline(sp.is_online ?? false);
       setRating(sp.avg_rating ?? 0);
-      setProviderName(sp.business_name ?? 'Provider');
+      // Prefer full_name from profiles as the display name, fallback to business_name
+      setProviderName(profile?.full_name || sp.business_name || 'Provider');
       if (sp.is_online) startLocationTracking(user.id);
     }
 
@@ -166,7 +168,7 @@ export default function ProviderHomeScreen() {
           todayJobs: res.data.todayJobs || 0,
           rating: res.data.rating || sp?.avg_rating || 0,
           weeklyData: res.data.weeklyData || [0,0,0,0,0,0,0],
-          providerName: sp?.business_name || 'Provider',
+          providerName: profile?.full_name || sp?.business_name || 'Provider',
           isOnline: sp?.is_online ?? false,
         }, 300); // 5-min TTL
       }
