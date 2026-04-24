@@ -28,7 +28,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import RescheduleModal from '../../components/bookings/RescheduleModal';
 import NearbyWorkers from '../../components/bookings/NearbyWorkers';
@@ -136,8 +136,22 @@ export default function TrackingScreen() {
                     .single();
 
                 if (locData) {
-                    setProviderLocation({ latitude: locData.latitude, longitude: locData.longitude });
+                    const newLoc = { latitude: locData.latitude, longitude: locData.longitude };
+                    setProviderLocation(newLoc);
                     setEta(data.status === 'arrived' ? 'Arrived' : '8-12 min');
+                    
+                    // 🚀 Fit map to show both customer and provider if we just got the location
+                    if (data.customer_latitude && data.customer_longitude) {
+                        setTimeout(() => {
+                            mapRef.current?.fitToCoordinates([
+                                { latitude: data.customer_latitude, longitude: data.customer_longitude },
+                                newLoc
+                            ], {
+                                edgePadding: { top: 140, right: 50, bottom: 300, left: 50 },
+                                animated: true,
+                            });
+                        }, 600);
+                    }
                 } else {
                     setEta('Calculating...');
                 }
@@ -497,7 +511,7 @@ export default function TrackingScreen() {
         );
     }
 
-    const providerName = booking?.provider_details?.business_name ?? booking?.provider_details?.profiles?.full_name ?? 'Worker';
+    const providerName = booking?.provider_details?.business_name || booking?.profiles?.full_name || 'Worker';
     const initial = providerName.charAt(0).toUpperCase();
     const statusMeta = STATUS_LABELS[booking.status] ?? STATUS_LABELS['confirmed'];
     const mapRegion = {
@@ -714,6 +728,31 @@ export default function TrackingScreen() {
                                 </View>
                             </Marker>
                         )}
+
+                        {/* Customer Destination Marker */}
+                        {booking?.customer_latitude && (
+                            <Marker 
+                                coordinate={{ latitude: booking.customer_latitude, longitude: booking.customer_longitude }} 
+                                title="Your Location"
+                            >
+                                <View style={styles.customerMarkerOuter}>
+                                    <View style={styles.customerMarkerInner} />
+                                </View>
+                            </Marker>
+                        )}
+
+                        {/* 🛤️ Virtual Line (Polyline) showing distance */}
+                        {providerLocation && booking?.customer_latitude && (
+                            <Polyline
+                                coordinates={[
+                                    { latitude: providerLocation.latitude, longitude: providerLocation.longitude },
+                                    { latitude: booking.customer_latitude, longitude: booking.customer_longitude }
+                                ]}
+                                strokeColor={PRIMARY}
+                                strokeWidth={3}
+                                lineDashPattern={[5, 5]} // Dashed line for "virtual" feel
+                            />
+                        )}
                     </MapView>
 
                     {/* Floating back button */}
@@ -744,7 +783,9 @@ export default function TrackingScreen() {
 
                             {/* Name + service + rating */}
                             <View style={styles.zomatoProviderInfo}>
-                                <Text style={styles.zomatoProviderName} numberOfLines={1}>{providerName}</Text>
+                                <Text style={styles.zomatoProviderName} numberOfLines={1}>
+                                    {providerName} {booking.status === 'confirmed' ? 'accepted your request' : 'is your expert'}
+                                </Text>
                                 <Text style={styles.zomatoServiceName} numberOfLines={1}>{booking.service_name_snapshot ?? 'Service'}</Text>
                                 <View style={styles.zomatoRatingRow}>
                                     <Star size={11} color="#F59E0B" fill="#F59E0B" />
@@ -832,7 +873,7 @@ export default function TrackingScreen() {
                             <TouchableOpacity
                                 style={styles.zomatoActionBtn}
                                 activeOpacity={0.75}
-                                onPress={() => router.push({ pathname: '/provider/[id]', params: { id: booking.provider_id } } as any)}
+                                onPress={() => router.push({ pathname: '/provider/[id]', params: { id: booking.provider_id, assigned: 'true' } } as any)}
                             >
                                 <View style={[styles.zomatoActionIcon, { backgroundColor: '#FFF7ED' }]}>
                                     <Star size={18} color="#F59E0B" />
@@ -966,6 +1007,17 @@ const styles = StyleSheet.create({
         borderWidth: 2.5, borderColor: '#FFF',
         shadowColor: PRIMARY, shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.4, shadowRadius: 8, elevation: 6,
+    },
+    // Customer Marker
+    customerMarkerOuter: {
+        width: 24, height: 24, borderRadius: 12,
+        backgroundColor: 'rgba(26, 63, 255, 0.15)',
+        justifyContent: 'center', alignItems: 'center',
+    },
+    customerMarkerInner: {
+        width: 12, height: 12, borderRadius: 6,
+        backgroundColor: PRIMARY,
+        borderWidth: 2, borderColor: '#FFF',
     },
     // Bottom Sheet
     sheet: {

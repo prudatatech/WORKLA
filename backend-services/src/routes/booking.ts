@@ -328,13 +328,15 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
                 const enrichedData = { ...data };
 
                 // Manual fetch for subcategory and provider details to avoid PGRST200 join errors
-                const [subsRes, provsRes] = await Promise.all([
+                const [subsRes, provsRes, detailRes] = await Promise.all([
                     data.subcategory_id ? supabaseAdmin.from('service_subcategories').select('id, name').eq('id', data.subcategory_id).single() : { data: null },
-                    data.provider_id ? supabaseAdmin.from('profiles').select('id, full_name, phone, avatar_url').eq('id', data.provider_id).single() : { data: null }
+                    data.provider_id ? supabaseAdmin.from('profiles').select('id, full_name, phone, avatar_url').eq('id', data.provider_id).single() : { data: null },
+                    data.provider_id ? supabaseAdmin.from('provider_details').select('business_name').eq('provider_id', data.provider_id).single() : { data: null }
                 ]);
 
                 enrichedData.service_subcategories = subsRes.data || null;
                 enrichedData.profiles = provsRes.data || null;
+                enrichedData.provider_details = detailRes.data || null;
 
                 return enrichedData;
                 // Active bookings: 15s TTL (status changes frequently)
@@ -417,18 +419,21 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
                         ? [...new Set(enrichedData.map(b => b.customer_id).filter(Boolean))]
                         : [...new Set(enrichedData.map(b => b.provider_id).filter(Boolean))];
 
-                    const [subsRes, provsRes] = await Promise.all([
+                    const [subsRes, provsRes, detailsRes] = await Promise.all([
                         subcategoryIds.length > 0 ? supabaseAdmin.from('service_subcategories').select('id, name').in('id', subcategoryIds) : { data: [] },
-                        targetProfileIds.length > 0 ? supabaseAdmin.from('profiles').select('id, full_name, phone, avatar_url').in('id', targetProfileIds) : { data: [] }
+                        targetProfileIds.length > 0 ? supabaseAdmin.from('profiles').select('id, full_name, phone, avatar_url').in('id', targetProfileIds) : { data: [] },
+                        targetProfileIds.length > 0 ? supabaseAdmin.from('provider_details').select('provider_id, business_name').in('provider_id', targetProfileIds) : { data: [] }
                     ]);
 
                     const subsMap = new Map((subsRes.data || []).map((s: any) => [s.id, s]));
                     const profileMap = new Map((provsRes.data || []).map((p: any) => [p.id, p]));
+                    const detailsMap = new Map((detailsRes.data || []).map((d: any) => [d.provider_id, d]));
 
                     enrichedData = enrichedData.map(booking => ({
                         ...booking,
                         service_subcategories: subsMap.get(booking.subcategory_id) || null,
-                        profiles: profileMap.get(role === 'provider' ? booking.customer_id : booking.provider_id) || null
+                        profiles: profileMap.get(role === 'provider' ? booking.customer_id : booking.provider_id) || null,
+                        provider_details: detailsMap.get(role === 'provider' ? booking.customer_id : booking.provider_id) || null
                     }));
                 }
 

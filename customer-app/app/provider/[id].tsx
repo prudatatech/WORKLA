@@ -28,7 +28,7 @@ const PRIMARY = '#1A3FFF';
 
 
 export default function ProviderDetailScreen() {
-    const { id } = useLocalSearchParams();
+    const { id, assigned } = useLocalSearchParams<{ id: string; assigned?: string }>();
     const router = useRouter();
     const [provider, setProvider] = useState<any>(null);
     const [reviews, setReviews] = useState<any[]>([]);
@@ -131,6 +131,12 @@ export default function ProviderDetailScreen() {
                     </View>
 
                     <Text style={styles.providerName}>{displayName}</Text>
+                    {assigned === 'true' && (
+                        <View style={styles.assignedBadge}>
+                            <BadgeCheck size={14} color="#FFF" />
+                            <Text style={styles.assignedBadgeText}>Assigned Expert</Text>
+                        </View>
+                    )}
                     {profile.city && (
                         <View style={styles.locationRow}>
                             <MapPin size={13} color="#9CA3AF" />
@@ -296,6 +302,12 @@ const styles = StyleSheet.create({
         borderWidth: 2, borderColor: '#FFF',
     },
     providerName: { fontSize: 20, fontWeight: '800', color: '#111827', marginTop: 12, marginBottom: 4 },
+    assignedBadge: {
+        flexDirection: 'row', alignItems: 'center', gap: 6,
+        backgroundColor: '#059669', borderRadius: 20,
+        paddingHorizontal: 12, paddingVertical: 4, marginBottom: 12,
+    },
+    assignedBadgeText: { fontSize: 12, fontWeight: '800', color: '#FFF' },
     locationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 10 },
     locationText: { fontSize: 13, color: '#9CA3AF' },
     verifiedPill: {

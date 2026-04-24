@@ -56,8 +56,10 @@ export default function BookingCard({ item, onCancel }: BookingCardProps) {
           </View>
         </View>
 
-        {item.provider_details?.business_name && (
-          <Text style={styles.cardProvider}>Worker: {item.provider_details.business_name}</Text>
+        {(item.provider_details?.business_name || item.profiles?.full_name) && (
+          <Text style={styles.cardProvider}>
+            Worker: {item.provider_details?.business_name || item.profiles?.full_name || 'Expert'}
+          </Text>
         )}
 
         <View style={styles.cardMeta}>
