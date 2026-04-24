@@ -139,7 +139,7 @@ export async function apiRequest<T = any>(
 export const api = {
     get: <T = any>(path: string, options?: RequestInit) => {
         const key = `GET:${path}`;
-        if (_pendingRequests.has(key)) return _pendingRequests.get(key);
+        if (_pendingRequests.has(key)) return _pendingRequests.get(key)!;
 
         const promise = apiRequest<T>(path, { ...options, method: 'GET' })
             .finally(() => _pendingRequests.delete(key));
@@ -147,6 +147,7 @@ export const api = {
         _pendingRequests.set(key, promise);
         return promise;
     },
+
 
     post: <T = any>(path: string, body: any, options?: RequestInit) =>
         apiRequest<T>(path, { ...options, method: 'POST', body: JSON.stringify(body) }),

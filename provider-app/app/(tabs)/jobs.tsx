@@ -87,25 +87,32 @@ export default function MyJobsScreen() {
 
   useEffect(() => { fetchJobs(); fetchOffers(); }, [fetchJobs, fetchOffers]);
 
-  // Real-time: booking status changes
+  // Real-time: booking status changes — patch local state DIRECTLY for instant UI update
   useEffect(() => {
     let bookingSub: any;
     let offerSub: any;
     const initSub = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      // Subscribe to booking updates
+
+      // Subscribe to booking updates — update local state instantly without re-fetch
       bookingSub = supabase
         .channel(`jobs-sync-${user.id}`)
         .on('postgres_changes', {
           event: 'UPDATE', schema: 'public', table: 'bookings', filter: `provider_id=eq.${user.id}`,
         }, (payload: any) => {
-          const oldStatus = payload.old.status;
-          const newStatus = payload.new.status;
+          const oldStatus = payload.old?.status;
+          const newStatus = payload.new?.status;
+
           if (newStatus === 'cancelled' && ['confirmed', 'en_route', 'arrived', 'in_progress'].includes(oldStatus)) {
             Vibration.vibrate([0, 500, 200, 500]);
             Alert.alert('⚠️ Job Cancelled', `Booking #${payload.new.id.slice(0, 8).toUpperCase()} has been cancelled by the customer.`, [{ text: 'OK', onPress: () => fetchJobs() }]);
-          } else { fetchJobs(true); }
+          } else {
+            // ⚡ Patch local state INSTANTLY from realtime payload — no API round-trip
+            setJobs(curr => curr.map(j =>
+              j.id === payload.new.id ? { ...j, ...payload.new } : j
+            ));
+          }
         }).subscribe();
 
       // Subscribe to new job offers — auto-refresh offers list
@@ -120,9 +127,13 @@ export default function MyJobsScreen() {
         })
         .on('postgres_changes', {
           event: 'UPDATE', schema: 'public', table: 'job_offers', filter: `provider_id=eq.${user.id}`,
-        }, () => {
-          fetchOffers();
-          fetchJobs(true);
+        }, (payload: any) => {
+          // Patch offer state instantly
+          setPendingOffers(curr => curr.map(o =>
+            o.id === payload.new?.id ? { ...o, ...payload.new } : o
+          ));
+          // If accepted, also refresh jobs
+          if (payload.new?.status === 'accepted') fetchJobs(true, true);
         })
         .subscribe();
     };

@@ -76,12 +76,12 @@ export class PushNotificationService {
 
         const message = {
             to: expoPushToken,
-            sound: 'job_alert.mp3', // Bundled custom ringtone
+            sound: 'default',  // Use system default — custom sound file not bundled
             title,
             body,
             data,
             priority: 'high',
-            channelId: 'job-alerts', // High-priority Android channel (bypassDnd = true)
+            channelId: 'job-alerts', // High-priority Android channel (bypassDnd via channel setting)
             ttl: 60,                  // Only deliver within 60 seconds (stale = useless)
             expiration: Math.floor(Date.now() / 1000) + 60,
             badge: 1,

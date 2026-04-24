@@ -34,6 +34,8 @@ import RazorpayCheckout from 'react-native-razorpay';
 import { useAddressStore } from '../../lib/addressStore';
 import { api } from '../../lib/api';
 import { supabase } from '../../lib/supabase';
+import { useBucketStore } from '../../lib/bucketStore';
+import BucketFAB from '../../components/BucketFAB';
 
 const PRIMARY = '#1A3FFF';
 
@@ -833,8 +835,40 @@ export default function RequestServiceScreen() {
 
             {/* Footer CTA */}
             <View style={styles.footer}>
+                {/* Add to Bucket — shown when task is selected and we're not at confirm */}
+                {step === 'task' && selectedSubcategory && (
+                    <TouchableOpacity
+                        style={styles.bucketBtn}
+                        activeOpacity={0.85}
+                        onPress={() => {
+                            const currentEstimate = getEstimate();
+                            const added = useBucketStore.getState().addItem({
+                                serviceId: selectedService!.id,
+                                serviceName: selectedService!.name,
+                                subcategoryId: selectedSubcategory!.id,
+                                subcategoryName: selectedSubcategory!.name,
+                                basePrice: parseFloat(currentEstimate.base),
+                                mode: 'now',
+                                scheduledDate: 'Today',
+                                scheduledSlot: '8 AM – 12 PM',
+                                specialInstructions: '',
+                                paymentMethod: 'cod',
+                                platformFee: parseFloat(currentEstimate.platform),
+                                taxAmount: parseFloat(currentEstimate.tax),
+                                totalAmount: parseFloat(currentEstimate.total),
+                            });
+                            if (!added) {
+                                Alert.alert('Bucket Full', 'You can add up to 3 services at a time.');
+                            } else {
+                                router.back();
+                            }
+                        }}
+                    >
+                        <Text style={styles.bucketBtnText}>+ Add to Bucket</Text>
+                    </TouchableOpacity>
+                )}
                 <TouchableOpacity
-                    style={[styles.nextBtn, !canGoNext && styles.nextBtnDisabled]}
+                    style={[styles.nextBtn, !canGoNext && styles.nextBtnDisabled, step === 'task' && selectedSubcategory && { flex: 1 }]}
                     onPress={handleNext}
                     disabled={!canGoNext || submitting}
                     activeOpacity={0.85}
@@ -851,6 +885,9 @@ export default function RequestServiceScreen() {
                     )}
                 </TouchableOpacity>
             </View>
+
+            {/* Floating bucket button */}
+            <BucketFAB />
         </SafeAreaView>
     );
 }
@@ -931,6 +968,8 @@ const styles = StyleSheet.create({
     nextBtn: { flex: 1, height: 52, borderRadius: 14, backgroundColor: PRIMARY, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, shadowColor: PRIMARY, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
     nextBtnDisabled: { backgroundColor: '#C7D2FE', shadowOpacity: 0 },
     nextBtnText: { fontSize: 16, fontWeight: '700', color: '#FFF' },
+    bucketBtn: { height: 52, borderRadius: 14, borderWidth: 2, borderColor: PRIMARY, paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center' },
+    bucketBtnText: { fontSize: 14, fontWeight: '800', color: PRIMARY },
     // Saved address chips
     savedAddrChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: `${PRIMARY}40`, backgroundColor: '#EEF2FF' },
     savedAddrChipActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },

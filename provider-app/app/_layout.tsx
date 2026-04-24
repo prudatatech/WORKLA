@@ -314,21 +314,71 @@ export default function RootLayout() {
 
         if (notifType === 'new_job' || dataType === 'new_job' || notifType === 'job_offer') {
           console.log('[Realtime] ✅ Job notification detected — triggering popup');
-          // For job_offer from DB trigger: offerId is in jobData.offer_id
           triggerIncomingJob(jobData, 'realtime');
         } else {
           showToast(notif.title || 'Notification', notif.body || '', 'info');
         }
       })
       .subscribe((status) => {
-        console.log('[Realtime] Subscription status:', status);
+        console.log('[Realtime:notifications] Subscription status:', status);
       });
 
     return () => {
-      console.log('[Realtime] Unsubscribing notifications channel');
       supabase.removeChannel(channel);
     };
   }, [session?.user?.id, triggerIncomingJob, showToast]);
+
+  // 5. BACKUP: Listen directly on job_offers INSERT (most reliable popup trigger)
+  // This fires even if notifications table realtime publication is not enabled.
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const offersChannel = supabase
+      .channel(`provider-offers-${session.user.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'job_offers',
+        filter: `provider_id=eq.${session.user.id}`,
+      }, async (payload: any) => {
+        console.log('[Realtime:offers] 🆕 New job offer:', JSON.stringify(payload.new));
+        const offer = payload.new;
+        if (!offer || offer.status !== 'pending') return;
+
+        // Fetch booking details for rich popup
+        try {
+          const { data: booking } = await supabase
+            .from('bookings')
+            .select('id, service_name_snapshot, customer_address, total_amount')
+            .eq('id', offer.booking_id)
+            .single();
+
+          triggerIncomingJob({
+            bookingId: offer.booking_id,
+            offerId:   offer.id,
+            serviceName: booking?.service_name_snapshot || 'Service Request',
+            service:     booking?.service_name_snapshot || 'Service Request',
+            address:     booking?.customer_address || 'Nearby Location',
+            amount:      booking?.total_amount || 0,
+            type:        'new_job',
+          }, 'offers-realtime');
+        } catch (e) {
+          // Fallback: trigger with basic data
+          triggerIncomingJob({
+            bookingId: offer.booking_id,
+            offerId:   offer.id,
+            type:      'new_job',
+          }, 'offers-realtime-fallback');
+        }
+      })
+      .subscribe((status) => {
+        console.log('[Realtime:offers] Subscription status:', status);
+      });
+
+    return () => {
+      supabase.removeChannel(offersChannel);
+    };
+  }, [session?.user?.id, triggerIncomingJob]);
 
   if (!initialized) return <LoadingScreen />;
 

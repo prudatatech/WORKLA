@@ -754,26 +754,134 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
     });
 
     /**
-     * @route GET /api/v1/admin/reports/gst-monthly
-     * @desc Get monthly GST report for accounting (Admin only)
+     * @route POST /api/v1/bookings/batch
+     * @desc Create multiple bookings in parallel (multi-service bucket checkout)
      */
-    fastify.get('/admin/reports/gst-monthly', async (request, reply) => {
+    fastify.post('/batch', async (request, reply) => {
+        const user = request.user;
+        const body = request.body as { items: any[] };
+
+        if (!body?.items || !Array.isArray(body.items) || body.items.length === 0) {
+            return reply.code(400).send({ error: 'INVALID_PAYLOAD', details: 'items array is required.' });
+        }
+        if (body.items.length > 3) {
+            return reply.code(400).send({ error: 'BUCKET_LIMIT', details: 'Maximum 3 services per batch.' });
+        }
+
         try {
-            const { data: isAdmin } = await supabaseAdmin.rpc('is_admin');
-            if (!isAdmin) {
-                return reply.code(403).send({ success: false, error: 'FORBIDDEN' });
+            const batchId = crypto.randomUUID();
+
+            // Create all bookings in parallel
+            const results = await Promise.allSettled(
+                body.items.map(async (item) => {
+                    const bookingNumber = `WK-${Date.now().toString(36).toUpperCase()}`;
+                    const { data, error } = await supabaseAdmin
+                        .from('bookings')
+                        .insert({
+                            booking_number: bookingNumber,
+                            customer_id: user.sub,
+                            service_id: item.serviceId,
+                            subcategory_id: item.subcategoryId,
+                            scheduled_date: item.scheduledDate,
+                            scheduled_time_slot: item.scheduledTimeSlot,
+                            customer_latitude: item.customerLatitude,
+                            customer_longitude: item.customerLongitude,
+                            customer_address: item.customerAddress,
+                            special_instructions: item.specialInstructions || null,
+                            payment_method: item.paymentMethod || 'cash',
+                            status: 'requested',
+                            total_amount: item.totalAmount,
+                            catalog_price: item.catalogPrice,
+                            platform_fee: item.platformFee,
+                            tax_amount: item.taxAmount,
+                            service_name_snapshot: item.serviceNameSnapshot,
+                            discount_amount: 0,
+                            payment_status: 'pending',
+                            batch_id: batchId,
+                        })
+                        .select()
+                        .single();
+
+                    if (error) throw error;
+
+                    // Dispatch each independently (non-blocking)
+                    supabaseAdmin.rpc('dispatch_job', { p_booking_id: data.id })
+                        .then(({ data: count }) => {
+                            fastify.log.info({ bookingId: data.id, offers: count }, '[Batch] Dispatched');
+                        })
+                        .catch((e) => fastify.log.error({ err: e.message, bookingId: data.id }, '[Batch] Dispatch failed'));
+
+                    return data;
+                })
+            );
+
+            const succeeded = results
+                .filter((r) => r.status === 'fulfilled')
+                .map((r) => (r as PromiseFulfilledResult<any>).value);
+
+            const failed = results.filter((r) => r.status === 'rejected').length;
+
+            if (succeeded.length === 0) {
+                return reply.code(500).send({ error: 'ALL_FAILED', details: 'All bookings failed to create.' });
             }
 
+            return reply.code(201).send({
+                success: true,
+                message: `${succeeded.length} booking(s) created.`,
+                data: {
+                    batchId,
+                    bookingIds: succeeded.map((b) => b.id),
+                    failed,
+                },
+            });
+        } catch (err: any) {
+            fastify.log.error(err);
+            return reply.code(500).send({ error: 'BATCH_CREATE_FAILED', details: err.message });
+        }
+    });
+
+    /**
+     * @route GET /api/v1/bookings/batch/:batchId
+     * @desc Fetch all bookings in a batch (for multi-booking tracking)
+     */
+    fastify.get('/batch/:batchId', async (request, reply) => {
+        const { batchId } = request.params as { batchId: string };
+        const user = request.user;
+        try {
             const { data, error } = await supabaseAdmin
-                .from('admin_gst_report')
-                .select('*');
+                .from('bookings')
+                .select('id, status, service_name_snapshot, booking_number, provider_id, total_amount, batch_id, scheduled_date, scheduled_time_slot')
+                .eq('batch_id', batchId)
+                .eq('customer_id', user.sub)
+                .order('created_at', { ascending: true });
 
             if (error) throw error;
-
-            return { success: true, data };
+            return reply.send({ success: true, data: data || [] });
         } catch (err: any) {
-            console.error(`🚨 [Admin] GST Report error:`, err);
-            return reply.code(500).send({ success: false, error: 'REPORT_GENERATION_FAILED' });
+            return reply.code(500).send({ error: 'BATCH_FETCH_FAILED', details: err.message });
+        }
+    });
+
+    /**
+     * @route GET /api/v1/bookings/active
+     * @desc Get all active bookings for home screen widget (up to 3)
+     */
+    fastify.get('/active', async (request, reply) => {
+        const user = request.user;
+        try {
+            const { data, error } = await supabaseAdmin
+                .from('bookings')
+                .select('id, status, service_name_snapshot, booking_number, batch_id, provider_id')
+                .eq('customer_id', user.sub)
+                .in('status', ['requested', 'searching', 'confirmed', 'en_route', 'arrived', 'in_progress'])
+                .order('created_at', { ascending: false })
+                .limit(3);
+
+            if (error) throw error;
+            return reply.send({ success: true, data: data || [] });
+        } catch (err: any) {
+            return reply.code(500).send({ error: 'FETCH_FAILED', details: err.message });
         }
     });
 }
+

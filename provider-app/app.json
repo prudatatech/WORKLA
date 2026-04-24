@@ -28,7 +28,8 @@
         "FOREGROUND_SERVICE",
         "NOTIFICATIONS",
         "VIBRATE",
-        "RECEIVE_BOOT_COMPLETED"
+        "RECEIVE_BOOT_COMPLETED",
+        "WAKE_LOCK"
       ],
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -64,14 +65,11 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "ee0fbef1-3b2b-400a-963a-46d7e38a5a23"
+        "projectId": "168fe595-52c0-4119-8ddc-de909ffc1910"
       }
     },
     "runtimeVersion": {
       "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/ee0fbef1-3b2b-400a-963a-46d7e38a5a23"
     }
   }
 }

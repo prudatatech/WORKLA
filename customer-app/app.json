@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Workla",
-    "owner": "prudata.tech",
+    "owner": "kushagratiwari252",
     "slug": "customer-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -75,9 +75,7 @@
     },
     "extra": {
       "router": {},
-      "eas": {
-        "projectId": "5b457792-31b3-42c3-9409-19193b9b5e7b"
-      }
+      "eas": {}
     },
     "runtimeVersion": {
       "policy": "appVersion"

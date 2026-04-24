@@ -727,112 +727,133 @@ export default function TrackingScreen() {
                         </View>
                     </SafeAreaView>
 
-                    {/* 🆘 Floating SOS button */}
-                    <TouchableOpacity
-                        style={styles.sosBtn}
-                        onPress={handleSOS}
-                        activeOpacity={0.85}
-                    >
-                        <Animated.View style={[styles.sosPulse, { transform: [{ scale: pulseAnim }] }]} />
-                        <Text style={styles.sosBtnText}>SOS</Text>
-                    </TouchableOpacity>
+                    {/* ZOMATO-STYLE BOTTOM PROVIDER CARD */}
+                    <View style={styles.zomatoCard}>
+                        {/* Colored accent bar at top */}
+                        <View style={[styles.zomatoAccentBar, { backgroundColor: statusMeta.color }]} />
 
-                    {/* BOTTOM SHEET */}
-                    <View style={styles.sheet}>
-                        {/* Handle bar */}
+                        {/* Handle */}
                         <View style={styles.handle} />
 
-                        {/* Status */}
-                        <View style={[styles.statusBadge, { backgroundColor: `${statusMeta.color}15` }]}>
-                            <View style={[styles.statusDot, { backgroundColor: statusMeta.color }]} />
-                            <Text style={[styles.statusTitle, { color: statusMeta.color }]}>{statusMeta.title}</Text>
-                        </View>
-                        <Text style={styles.statusSub}>{statusMeta.sub}</Text>
+                        {/* Top row: provider info + ETA chip */}
+                        <View style={styles.zomatoTopRow}>
+                            {/* Avatar */}
+                            <View style={[styles.zomatoAvatar, { borderColor: statusMeta.color }]}>
+                                <Text style={styles.zomatoAvatarText}>{initial}</Text>
+                            </View>
 
-                        {/* Premium Stepper Timeline */}
+                            {/* Name + service + rating */}
+                            <View style={styles.zomatoProviderInfo}>
+                                <Text style={styles.zomatoProviderName} numberOfLines={1}>{providerName}</Text>
+                                <Text style={styles.zomatoServiceName} numberOfLines={1}>{booking.service_name_snapshot ?? 'Service'}</Text>
+                                <View style={styles.zomatoRatingRow}>
+                                    <Star size={11} color="#F59E0B" fill="#F59E0B" />
+                                    <Text style={styles.zomatoRatingText}>
+                                        {booking?.provider_details?.avg_rating ?? '4.8'}
+                                    </Text>
+                                    <Text style={styles.zomatoRatingDivider}>•</Text>
+                                    <Text style={styles.zomatoRatingText}>₹{booking.total_amount ?? '—'}</Text>
+                                </View>
+                            </View>
+
+                            {/* ETA chip */}
+                            <View style={[styles.zomatoEtaChip, { backgroundColor: `${statusMeta.color}15`, borderColor: `${statusMeta.color}30` }]}>
+                                <Timer size={12} color={statusMeta.color} />
+                                <Text style={[styles.zomatoEtaText, { color: statusMeta.color }]}>{eta}</Text>
+                            </View>
+                        </View>
+
+                        {/* Status label strip */}
+                        <View style={styles.zomatoStatusStrip}>
+                            <View style={[styles.zomatoStatusDot, { backgroundColor: statusMeta.color }]} />
+                            <Text style={styles.zomatoStatusLabel}>{statusMeta.title}</Text>
+                            <Text style={styles.zomatoStatusSub}> — {statusMeta.sub}</Text>
+                        </View>
+
+                        {/* Stepper */}
                         <View style={styles.stepperContainer}>
                             {[
-                                { key: 'confirmed', label: 'Confirmed', icon: 'check-circle' },
-                                { key: 'en_route', label: 'On Way', icon: 'send' },
-                                { key: 'in_progress', label: 'Started', icon: 'tool' },
-                                { key: 'completed', label: 'Done', icon: 'flag' }
+                                { key: 'confirmed', label: 'Confirmed' },
+                                { key: 'en_route', label: 'On Way' },
+                                { key: 'in_progress', label: 'Started' },
+                                { key: 'completed', label: 'Done' }
                             ].map((step, i) => {
                                 const statuses = ['confirmed', 'en_route', 'arrived', 'in_progress', 'completed'];
                                 const currentStatusIdx = statuses.indexOf(booking.status);
-
-                                // Mapping step keys to their index in the statuses array for logic
-                                const stepToIdx: Record<string, number> = {
-                                    confirmed: 0,
-                                    en_route: 1,
-                                    in_progress: 3,
-                                    completed: 4
-                                };
-
+                                const stepToIdx: Record<string, number> = { confirmed: 0, en_route: 1, in_progress: 3, completed: 4 };
                                 const stepIdx = stepToIdx[step.key];
                                 const isDone = currentStatusIdx >= stepIdx;
                                 const isActive = currentStatusIdx === stepIdx || (step.key === 'en_route' && booking.status === 'arrived');
-
                                 return (
                                     <View key={step.key} style={styles.stepItem}>
                                         <View style={[styles.stepDot, isDone && styles.stepDotDone, isActive && styles.stepDotActive]}>
                                             {isDone && <Text style={styles.stepCheck}>✓</Text>}
                                         </View>
-                                        <Text style={[styles.stepLabel, isDone && styles.stepLabelDone, isActive && styles.stepLabelActive]}>
-                                            {step.label}
-                                        </Text>
+                                        <Text style={[styles.stepLabel, isDone && styles.stepLabelDone, isActive && styles.stepLabelActive]}>{step.label}</Text>
                                         {i < 3 && <View style={[styles.stepLine, isDone && styles.stepLineDone]} />}
                                     </View>
                                 );
                             })}
                         </View>
 
-                        {/* Worker card */}
-                        <View style={styles.workerCard}>
-                            <View style={styles.workerAvatar}>
-                                <Text style={styles.workerAvatarText}>{initial}</Text>
-                            </View>
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.workerName}>{providerName}</Text>
-                                <View style={styles.workerRatingRow}>
-                                    <Star size={12} color="#F59E0B" fill="#F59E0B" />
-                                    <Text style={styles.workerRating}>4.8  •  {booking.service_name_snapshot ?? 'Service'}</Text>
+                        {/* Divider */}
+                        <View style={styles.zomatoDivider} />
+
+                        {/* Action buttons row */}
+                        <View style={styles.zomatoActionsRow}>
+                            <TouchableOpacity
+                                style={styles.zomatoActionBtn}
+                                activeOpacity={0.75}
+                                onPress={() => router.push({ pathname: '/chat/[id]', params: { id: String(id) } } as any)}
+                            >
+                                <View style={[styles.zomatoActionIcon, { backgroundColor: '#EEF2FF' }]}>
+                                    <MessageSquare size={18} color={PRIMARY} />
                                 </View>
-                                <TouchableOpacity
-                                    onPress={() => router.push({ pathname: '/provider/[id]', params: { id: booking.provider_id } } as any)}
-                                    style={{ marginTop: 4 }}
-                                >
-                                    <Text style={{ fontSize: 12, color: PRIMARY, fontWeight: '600' }}>View Profile</Text>
-                                </TouchableOpacity>
-                            </View>
-                            {/* Quick action buttons */}
-                            <View style={styles.quickActions}>
-                                {QUICK_ACTIONS.map((action) => (
-                                    <TouchableOpacity
-                                        key={action.key}
-                                        style={styles.actionBtn}
-                                        activeOpacity={0.8}
-                                        onPress={() => {
-                                            if (action.key === 'chat') {
-                                                router.push({ pathname: '/chat/[id]', params: { id: String(id) } } as any);
-                                            } else if (action.key === 'call') {
-                                                if (booking.profiles?.phone) {
-                                                    initiateCall(booking.profiles.phone);
-                                                } else {
-                                                    Alert.alert('Error', 'Provider phone number not available.');
-                                                }
-                                            } else {
-                                                handleShare();
-                                            }
-                                        }}
-                                    >
-                                        <action.Icon size={16} color={PRIMARY} />
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
+                                <Text style={styles.zomatoActionLabel}>Chat</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.zomatoActionBtn}
+                                activeOpacity={0.75}
+                                onPress={() => {
+                                    if (booking.profiles?.phone) {
+                                        initiateCall(booking.profiles.phone);
+                                    } else {
+                                        Alert.alert('Error', 'Provider phone not available.');
+                                    }
+                                }}
+                            >
+                                <View style={[styles.zomatoActionIcon, { backgroundColor: '#ECFDF5' }]}>
+                                    <Phone size={18} color="#059669" />
+                                </View>
+                                <Text style={styles.zomatoActionLabel}>Call</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.zomatoActionBtn}
+                                activeOpacity={0.75}
+                                onPress={() => router.push({ pathname: '/provider/[id]', params: { id: booking.provider_id } } as any)}
+                            >
+                                <View style={[styles.zomatoActionIcon, { backgroundColor: '#FFF7ED' }]}>
+                                    <Star size={18} color="#F59E0B" />
+                                </View>
+                                <Text style={styles.zomatoActionLabel}>Profile</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.zomatoActionBtn}
+                                activeOpacity={0.75}
+                                onPress={handleSOS}
+                            >
+                                <View style={[styles.zomatoActionIcon, { backgroundColor: '#FEF2F2' }]}>
+                                    <Shield size={18} color="#DC2626" />
+                                </View>
+                                <Text style={styles.zomatoActionLabel}>SOS</Text>
+                            </TouchableOpacity>
                         </View>
 
-                        {/* Booking meta */}
-                        <View style={styles.bookingMeta}>
+                        {/* Footer: cancel / reschedule */}
+                        <View style={styles.zomatoFooterRow}>
                             <TouchableOpacity
                                 disabled={['completed', 'cancelled', 'disputed'].includes(booking.status)}
                                 onPress={() => setCancelModalVisible(true)}
@@ -846,12 +867,11 @@ export default function TrackingScreen() {
                                 onPress={() => setRescheduleModalVisible(true)}
                                 style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
                             >
-                                <Calendar size={14} color={['requested', 'searching', 'confirmed'].includes(booking.status) ? PRIMARY : '#9CA3AF'} />
+                                <Calendar size={13} color={['requested', 'searching', 'confirmed'].includes(booking.status) ? PRIMARY : '#9CA3AF'} />
                                 <Text style={[styles.rescheduleLink, !['requested', 'searching', 'confirmed'].includes(booking.status) && { color: '#9CA3AF' }]}>
                                     Reschedule
                                 </Text>
                             </TouchableOpacity>
-                            <Text style={styles.metaValue}>Est. ₹{booking.total_amount ?? '—'}</Text>
                         </View>
 
                         {/* Proof of Work Section */}
@@ -1039,7 +1059,7 @@ const styles = StyleSheet.create({
     confirmCancelBtn: { flex: 1, height: 56, borderRadius: 16, backgroundColor: '#DC2626', justifyContent: 'center', alignItems: 'center' },
     confirmCancelBtnDisabled: { opacity: 0.5 },
     confirmCancelText: { fontSize: 16, fontWeight: '800', color: '#FFF' },
-    // SOS
+    // SOS (kept for legacy reference, now inside action row)
     sosBtn: {
         position: 'absolute', bottom: 200, right: 20,
         width: 56, height: 56, borderRadius: 28,
@@ -1053,6 +1073,147 @@ const styles = StyleSheet.create({
         backgroundColor: '#FCA5A520',
     },
     sosBtnText: { fontSize: 14, fontWeight: '900', color: '#FFF', letterSpacing: 1 },
+    // ─── Zomato-style bottom card ───────────────────────────────────────
+    zomatoCard: {
+        backgroundColor: '#FFF',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        paddingHorizontal: 20,
+        paddingBottom: 28,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -6 },
+        shadowOpacity: 0.1,
+        shadowRadius: 18,
+        elevation: 16,
+        overflow: 'hidden',
+    },
+    zomatoAccentBar: {
+        position: 'absolute',
+        top: 0, left: 0, right: 0,
+        height: 3,
+    },
+    zomatoTopRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        marginBottom: 10,
+        marginTop: 4,
+    },
+    zomatoAvatar: {
+        width: 52,
+        height: 52,
+        borderRadius: 26,
+        backgroundColor: '#EEF2FF',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: PRIMARY,
+    },
+    zomatoAvatarText: {
+        fontSize: 22,
+        fontWeight: '900',
+        color: PRIMARY,
+    },
+    zomatoProviderInfo: { flex: 1 },
+    zomatoProviderName: {
+        fontSize: 17,
+        fontWeight: '800',
+        color: '#111827',
+        marginBottom: 2,
+    },
+    zomatoServiceName: {
+        fontSize: 12,
+        color: '#6B7280',
+        fontWeight: '500',
+        marginBottom: 4,
+    },
+    zomatoRatingRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    zomatoRatingText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#374151',
+    },
+    zomatoRatingDivider: {
+        fontSize: 10,
+        color: '#9CA3AF',
+        marginHorizontal: 2,
+    },
+    zomatoEtaChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
+        borderWidth: 1,
+        minWidth: 72,
+        justifyContent: 'center',
+    },
+    zomatoEtaText: {
+        fontSize: 13,
+        fontWeight: '800',
+    },
+    zomatoStatusStrip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginBottom: 14,
+    },
+    zomatoStatusDot: {
+        width: 7,
+        height: 7,
+        borderRadius: 4,
+    },
+    zomatoStatusLabel: {
+        fontSize: 13,
+        fontWeight: '800',
+        color: '#111827',
+    },
+    zomatoStatusSub: {
+        fontSize: 12,
+        color: '#6B7280',
+        fontWeight: '500',
+        flex: 1,
+    },
+    zomatoDivider: {
+        height: 1,
+        backgroundColor: '#F3F4F6',
+        marginVertical: 14,
+    },
+    zomatoActionsRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        marginBottom: 14,
+    },
+    zomatoActionBtn: {
+        alignItems: 'center',
+        gap: 6,
+    },
+    zomatoActionIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    zomatoActionLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#374151',
+    },
+    zomatoFooterRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#F3F4F6',
+        marginBottom: 4,
+    },
     // Searching Footer
     searchingFooter: {
         position: 'absolute', bottom: 40, left: 20, right: 20,

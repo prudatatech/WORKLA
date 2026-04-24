@@ -59,7 +59,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [servicesError, setServicesError] = useState<string | null>(null);
   const [recentBookings, setRecentBookings] = useState<any[]>([]);
-  const [activeBooking, setActiveBooking] = useState<any>(null);
+  const [activeBookings, setActiveBookings] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loyaltyCoins, setLoyaltyCoins] = useState(0);
   const [unratedBooking, setUnratedBooking] = useState<any>(null);
@@ -176,20 +176,22 @@ export default function HomeScreen() {
       // Phase 2: Background user-specific data
       (async () => {
         if (!user) return;
+        const userId = user.id; // narrowed: guaranteed string after guard
         try {
           const results = await Promise.all([
-            api.get('/api/v1/users/me').catch(() => ({ data: null })),
+            api.get('/api/v1/users/me').catch(() => ({ data: null } as any)),
             supabase.from('bookings').select('id, service_name_snapshot')
-              .eq('customer_id', user.id).eq('status', 'completed').is('customer_rating', null)
+              .eq('customer_id', userId).eq('status', 'completed').is('customer_rating', null)
               .order('completed_at', { ascending: false }).limit(1).maybeSingle(),
             supabase.from('bookings').select('id, service_name_snapshot, completed_at, scheduled_date')
-              .eq('customer_id', user.id).eq('status', 'completed').order('completed_at', { ascending: false }).limit(3),
-            supabase.from('bookings').select('id, status, service_name_snapshot, booking_number')
-              .eq('customer_id', user.id).in('status', ['requested', 'searching', 'confirmed', 'en_route', 'arrived', 'in_progress'])
-              .order('created_at', { ascending: false }).limit(1).maybeSingle(),
-            api.get('/api/v1/drafts').catch(() => ({ data: [] })),
-            api.get('/api/v1/addresses').catch(() => ({ data: [] }))
+              .eq('customer_id', userId).eq('status', 'completed').order('completed_at', { ascending: false }).limit(3),
+            supabase.from('bookings').select('id, status, service_name_snapshot, booking_number, batch_id')
+              .eq('customer_id', userId).in('status', ['requested', 'searching', 'confirmed', 'en_route', 'arrived', 'in_progress'])
+              .order('created_at', { ascending: false }).limit(3),
+            api.get('/api/v1/drafts').catch(() => ({ data: [] } as any)),
+            api.get('/api/v1/addresses').catch(() => ({ data: [] } as any))
           ]);
+
           
           const [meRes, unratedRes, recentRes, activeRes, draftRes, addressRes] = results as any[];
 
@@ -205,11 +207,11 @@ export default function HomeScreen() {
           if (unratedRes.data) setUnratedBooking(unratedRes.data);
           if (recentRes.data) setRecentBookings(recentRes.data);
           
-          if (activeRes.data && !isBannerDismissedThisSession) {
-            setActiveBooking(activeRes.data);
+          if (activeRes.data && activeRes.data.length > 0 && !isBannerDismissedThisSession) {
+            setActiveBookings(activeRes.data);
             Animated.spring(bannerSlide, { toValue: 0, useNativeDriver: true, speed: 10 }).start();
           } else {
-            setActiveBooking(null);
+            setActiveBookings([]);
           }
           if (Array.isArray(draftRes.data)) setDrafts(draftRes.data);
 
@@ -287,17 +289,22 @@ export default function HomeScreen() {
             const activeStatuses = ['requested', 'searching', 'confirmed', 'en_route', 'arrived', 'in_progress'];
             
             if (activeStatuses.includes(booking.status)) {
-              const { data: fullBooking } = await supabase
-                .from('bookings').select('id, status, service_name_snapshot, booking_number')
-                .eq('id', booking.id)
-                .single();
+              const { data: active } = await supabase
+                .from('bookings').select('id, status, service_name_snapshot, booking_number, batch_id')
+                .eq('customer_id', session.user.id)
+                .in('status', activeStatuses)
+                .order('created_at', { ascending: false })
+                .limit(3);
               
-              if (fullBooking && !isBannerDismissedThisSession) {
-                setActiveBooking(fullBooking);
+              if (active && active.length > 0 && !isBannerDismissedThisSession) {
+                setActiveBookings(active);
                 Animated.spring(bannerSlide, { toValue: 0, useNativeDriver: true, speed: 10 }).start();
               }
             } else if (booking.status === 'completed' || booking.status === 'cancelled') {
-              Animated.timing(bannerSlide, { toValue: -80, useNativeDriver: true, duration: 200 }).start(() => setActiveBooking(null));
+              setActiveBookings(prev => prev.filter(b => b.id !== booking.id));
+              if (activeBookings.length <= 1) {
+                Animated.timing(bannerSlide, { toValue: -80, useNativeDriver: true, duration: 200 }).start();
+              }
               if (booking.status === 'completed') {
                 loadData(); 
               }
@@ -408,7 +415,7 @@ export default function HomeScreen() {
 
   const dismissBanner = () => {
     isBannerDismissedThisSession = true;
-    Animated.timing(bannerSlide, { toValue: -80, useNativeDriver: true, duration: 200 }).start(() => setActiveBooking(null));
+    Animated.timing(bannerSlide, { toValue: -80, useNativeDriver: true, duration: 200 }).start(() => setActiveBookings([]));
   };
 
   return (
@@ -421,8 +428,8 @@ export default function HomeScreen() {
         notifPulse={notifPulse}
       />
 
-      {activeBooking && (
-        <ActiveBookingBanner activeBooking={activeBooking} bannerSlide={bannerSlide} onDismiss={dismissBanner} />
+      {activeBookings.length > 0 && (
+        <ActiveBookingBanner activeBookings={activeBookings} bannerSlide={bannerSlide} onDismiss={dismissBanner} />
       )}
 
       <ScrollView

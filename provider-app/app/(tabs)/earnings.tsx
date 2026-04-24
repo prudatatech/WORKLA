@@ -119,7 +119,7 @@ export default function EarningsScreen() {
                                 transferMethod: 'bank_transfer'
                             });
 
-                            if (res.success) {
+                            if (!res.error) {
                                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                                 Alert.alert('Request Sent', 'Your withdrawal request has been submitted for admin approval. Funds will be moved to escrow.');
                                 fetchFinancials(); // Refresh balance

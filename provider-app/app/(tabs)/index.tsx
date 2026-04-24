@@ -40,6 +40,11 @@ interface IncomingJob {
   distance: string; estimatedPrice: number; customerName: string; scheduledDate: string; timeSlot: string;
 }
 
+interface IncompleteProfile {
+  type: 'kyc' | 'bank' | 'both' | null;
+  underReview?: boolean;
+}
+
 export default function ProviderHomeScreen() {
   const [isOnline, setIsOnline] = useState(false);
   const [toggling, setToggling] = useState(false);
@@ -48,10 +53,11 @@ export default function ProviderHomeScreen() {
   const [rating, setRating] = useState(0);
   const [weeklyData, setWeeklyData] = useState<number[]>(new Array(7).fill(0));
   const [providerName, setProviderName] = useState('Provider');
-  const [incompleteProfile, setIncompleteProfile] = useState<{ type: 'kyc' | 'bank' | 'both' | null } | null>(null);
+  const [activeJob, setActiveJob] = useState<any>(null);
+  const [incompleteProfile, setIncompleteProfile] = useState<IncompleteProfile | null>(null);
   const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [currentCity, setCurrentCity] = useState<string>('Detecting location...');
-  const [activeJob, setActiveJob] = useState<any>(null);
+
 
   const router = useRouter();
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -140,10 +146,10 @@ export default function ProviderHomeScreen() {
     // If documents are pending review, we'll store that state to change UI color
     const isUnderReview = hasPending && !allVerified;
     
-    if (!hasDocuments && !bank) setIncompleteProfile({ type: 'both', underReview: isUnderReview });
-    else if (!hasDocuments) setIncompleteProfile({ type: 'kyc', underReview: isUnderReview });
-    else if (!bank) setIncompleteProfile({ type: 'bank', underReview: isUnderReview });
-    else if (!allVerified) setIncompleteProfile({ type: 'kyc', underReview: isUnderReview }); // Still show if not fully verified but maybe not red
+    if (!hasDocuments && !bank) setIncompleteProfile({ type: 'both', underReview: !!isUnderReview });
+    else if (!hasDocuments) setIncompleteProfile({ type: 'kyc', underReview: !!isUnderReview });
+    else if (!bank) setIncompleteProfile({ type: 'bank', underReview: !!isUnderReview });
+    else if (!allVerified) setIncompleteProfile({ type: 'kyc', underReview: !!isUnderReview });
     else setIncompleteProfile(null);
 
     try {
@@ -396,7 +402,7 @@ const styles = StyleSheet.create({
   howNumText: { color: PRIMARY, fontSize: 14, fontWeight: '800' },
   howStepTitle: { fontSize: 15, fontWeight: '700', color: '#111827', marginBottom: 2 },
   howStepDesc: { fontSize: 13, color: '#6B7280', lineHeight: 18 },
-
+  activeJobWidget: {},
   locationBanner: { 
     flexDirection: 'row', 
     alignItems: 'center', 
