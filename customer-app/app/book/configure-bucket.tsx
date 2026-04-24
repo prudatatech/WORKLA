@@ -34,8 +34,13 @@ export default function ConfigureBucketScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(items[0]?.id ?? null);
 
+  React.useEffect(() => {
+    if (items.length === 0) {
+      router.replace('/(tabs)/' as any);
+    }
+  }, [items.length, router]);
+
   if (items.length === 0) {
-    router.replace('/(tabs)/' as any);
     return null;
   }
 

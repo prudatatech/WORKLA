@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { Vibration, Platform } from 'react-native';
 import { Audio } from 'expo-av';
 
@@ -10,7 +10,7 @@ export function useAlertSystem() {
   const activeRef  = useRef(false);
   const vibTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const stopAlert = async () => {
+  const stopAlert = useCallback(async () => {
     activeRef.current = false;
 
     // 1. Stop vibration
@@ -30,9 +30,9 @@ export function useAlertSystem() {
     } catch (error) {
       console.warn('[AlertSystem] Stop error (safe to ignore):', error);
     }
-  };
+  }, []);
 
-  const startAlert = async () => {
+  const startAlert = useCallback(async () => {
     // Prevent double-start
     if (activeRef.current) return;
     activeRef.current = true;
@@ -66,7 +66,7 @@ export function useAlertSystem() {
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         playsInSilentModeIOS: true,   // CRITICAL: plays sound even on iOS silent mode
-        staysActiveInBackground: false,
+        staysActiveInBackground: true, // CRITICAL: allows sound if app is backgrounded
         shouldDuckAndroid: false,
       });
 
@@ -86,7 +86,7 @@ export function useAlertSystem() {
       // Audio failure is non-fatal — vibration still works
       console.warn('[AlertSystem] Audio error (vibration still active):', audioError);
     }
-  };
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {

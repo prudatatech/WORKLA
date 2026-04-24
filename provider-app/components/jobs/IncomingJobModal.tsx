@@ -52,20 +52,19 @@ export default function IncomingJobModal({ visible, jobData, onClose, onAccept, 
             ).start();
 
             timer = setInterval(() => {
-                setCountdown(prev => {
-                    if (prev <= 1) {
-                        clearInterval(timer);
-                        onClose();
-                        return 0;
-                    }
-                    return prev - 1;
-                });
+                setCountdown(prev => Math.max(0, prev - 1));
             }, 1000);
         } else {
             pulse.setValue(1);
         }
         return () => clearInterval(timer);
-    }, [visible, onClose, pulse]);
+    }, [visible, pulse]);
+
+    useEffect(() => {
+        if (visible && countdown === 0) {
+            onClose();
+        }
+    }, [visible, countdown, onClose]);
 
     const handleAccept = async () => {
         setLoading(true);

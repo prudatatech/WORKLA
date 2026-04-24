@@ -5,6 +5,7 @@ import { Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ServiceDetailSkeleton } from '../../../components/SkeletonLoader';
 import { supabase } from '../../../lib/supabase';
+import BucketFAB from '../../../components/BucketFAB'; // Force rebuild
 
 const { width } = Dimensions.get('window');
 const PRIMARY = '#1A3FFF';
@@ -202,6 +203,7 @@ export default function ServiceDetailScreen() {
                     <Text style={styles.bookBtnText}>Select & Book Now</Text>
                 </TouchableOpacity>
             </View>
+            <BucketFAB />
         </View>
     );
 }

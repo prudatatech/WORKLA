@@ -835,8 +835,8 @@ export default function RequestServiceScreen() {
 
             {/* Footer CTA */}
             <View style={styles.footer}>
-                {/* Add to Bucket — shown when task is selected and we're not at confirm */}
-                {step === 'task' && selectedSubcategory && (
+                {/* Add to Bucket — shown when task or details are selected and we're not at confirm */}
+                {(step === 'task' || step === 'details') && selectedSubcategory && (
                     <TouchableOpacity
                         style={styles.bucketBtn}
                         activeOpacity={0.85}

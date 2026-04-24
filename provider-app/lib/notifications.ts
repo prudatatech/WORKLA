@@ -1,13 +1,24 @@
-import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
+let Notifications: any = null;
+try {
+  Notifications = require('expo-notifications');
+} catch (e) {
+  console.warn('[Notifications] expo-notifications module unavailable in this environment.');
+}
+
 /**
  * Handles Push Notification registration and persistence
  */
 export async function registerForPushNotificationsAsync() {
+  if (!Notifications) {
+    console.warn('[Notifications] Cannot register, expo-notifications is not loaded.');
+    return null;
+  }
+  
   let token;
 
   if (Platform.OS === 'android') {

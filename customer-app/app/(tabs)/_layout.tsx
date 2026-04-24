@@ -2,6 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { Tabs } from 'expo-router';
 import { Bell, BookOpen, Home, Search, User } from 'lucide-react-native';
 import React from 'react';
+import BucketFAB from '../../components/BucketFAB';
 import { Dimensions, StyleSheet, Text, View } from 'react-native';
 
 const { width } = Dimensions.get('window');
@@ -50,6 +51,7 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
 
 export default function TabLayout() {
   return (
+    <>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -116,6 +118,8 @@ export default function TabLayout() {
         options={{ href: null }}
       />
     </Tabs>
+    <BucketFAB />
+    </>
   );
 }
 

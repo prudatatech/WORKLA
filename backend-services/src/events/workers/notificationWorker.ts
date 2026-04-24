@@ -221,7 +221,17 @@ export async function startNotificationWorker() {
                     const { data: booking } = await supabaseAdmin.from('bookings').select('customer_id, provider_id, booking_number').eq('id', data.bookingId).single();
                     if (booking) {
                         await notifyUser(booking.customer_id, 'Booking Cancelled ❌', `Your booking ${booking.booking_number} has been cancelled.`, 'booking_update', { bookingId: data.bookingId, status: 'cancelled' });
-                        if (booking.provider_id) await notifyUser(booking.provider_id, 'Job Cancelled ❌', `Job ${booking.booking_number} has been cancelled by the customer.`, 'booking_update', { bookingId: data.bookingId, status: 'cancelled' });
+                        if (booking.provider_id) {
+                            await notifyUser(booking.provider_id, 'Job Cancelled ❌', `Job ${booking.booking_number} has been cancelled by the customer.`, 'booking_update', { bookingId: data.bookingId, status: 'cancelled' });
+                        } else {
+                            // If no provider assigned, booking was searching. Cancel ringing for pending offers.
+                            const { data: offers } = await supabaseAdmin.from('job_offers').select('provider_id').eq('booking_id', data.bookingId).eq('status', 'pending');
+                            if (offers && offers.length > 0) {
+                                for (const offer of offers) {
+                                    await notifyUser(offer.provider_id, 'Job Cancelled ❌', `The customer cancelled the request.`, 'job_cancelled', { bookingId: data.bookingId });
+                                }
+                            }
+                        }
                     }
                     break;
                 }

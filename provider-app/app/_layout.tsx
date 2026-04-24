@@ -4,9 +4,14 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as TaskManager from 'expo-task-manager';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, LogBox } from 'react-native';
 import 'react-native-reanimated';
 import { supabase } from '../lib/supabase';
+
+LogBox.ignoreLogs([
+  'expo-notifications: Android Push notifications',
+  'Unable to activate keep awake'
+]);
 import { socketService } from '../lib/socket';
 import NetworkBanner from '../components/NetworkBanner';
 import InAppToast from '../components/InAppToast';
@@ -16,18 +21,21 @@ import { api } from '../lib/api';
 import { localCache } from '../lib/localCache';
 import { registerForPushNotificationsAsync } from '../lib/notifications';
 import { useAlertSystem } from '../hooks/useAlertSystem';
-import * as Notifications from 'expo-notifications';
-
-// Handle notifications in foreground
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+let Notifications: any = null;
+try {
+  Notifications = require('expo-notifications');
+  // Handle notifications in foreground
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+} catch (e) {
+  console.warn('[Notifications] expo-notifications unavailable in this environment.');
+}
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -143,15 +151,19 @@ export default function RootLayout() {
     processingJobRef.current = dedupeKey;
 
     // 1. Schedule system push notification
-    Notifications.scheduleNotificationAsync({
-      content: {
-        title: '🔔 New Job Alert!',
-        body: `${jobData.serviceName} — ₹${jobData.amount}`,
-        data: jobData,
-        sound: 'default',
-      },
-      trigger: null,
-    }).catch(e => console.error('[Notifications] Failed to schedule:', e));
+    try {
+      Notifications.scheduleNotificationAsync({
+        content: {
+          title: '🔔 New Job Alert!',
+          body: `${jobData.serviceName} — ₹${jobData.amount}`,
+          data: jobData,
+          sound: 'default',
+        },
+        trigger: null,
+      }).catch((e: any) => console.error('[Notifications] Failed to schedule promise:', e));
+    } catch (e: any) {
+      console.warn('[Notifications] Sync error when scheduling (expected in Expo Go):', e);
+    }
 
     // 2. Start vibration + sound
     startAlert();
@@ -256,6 +268,15 @@ export default function RootLayout() {
       const type = (payload.type || '').toLowerCase();
       if (type === 'new_job') {
         triggerIncomingJob(payload.data, 'socket');
+      } else if (type === 'job_cancelled') {
+        const cancelledBookingId = payload.data?.bookingId;
+        if (processingJobRef.current === cancelledBookingId) {
+          console.log('[Socket] 🛑 Job cancelled by customer. Stopping alert.');
+          stopAlert();
+          setIncomingJob(null);
+          processingJobRef.current = null;
+        }
+        showToast(payload.title || 'Notification', payload.body || '', 'info');
       } else {
         showToast(payload.title || 'Notification', payload.body || '', 'info');
       }
@@ -315,6 +336,15 @@ export default function RootLayout() {
         if (notifType === 'new_job' || dataType === 'new_job' || notifType === 'job_offer') {
           console.log('[Realtime] ✅ Job notification detected — triggering popup');
           triggerIncomingJob(jobData, 'realtime');
+        } else if (notifType === 'job_cancelled' || dataType === 'job_cancelled') {
+          const cancelledBookingId = jobData.bookingId;
+          if (processingJobRef.current === cancelledBookingId) {
+            console.log('[Realtime] 🛑 Job cancelled by customer. Stopping alert.');
+            stopAlert();
+            setIncomingJob(null);
+            processingJobRef.current = null;
+          }
+          showToast(notif.title || 'Notification', notif.body || '', 'info');
         } else {
           showToast(notif.title || 'Notification', notif.body || '', 'info');
         }
