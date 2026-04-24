@@ -151,14 +151,18 @@ export async function startNotificationWorker() {
                 case 'booking.created': {
                     console.warn(`[Worker 🔔] Handling 'booking.created' for ID ${data.bookingId}...`);
                     
-                    // ⚡ DISPATCH: Find eligible providers and create job_offers
-                    const { data: dispatchCount, error: dispatchError } = await supabaseAdmin
-                        .rpc('dispatch_job', { p_booking_id: data.bookingId });
-                    
-                    if (dispatchError) {
-                        console.error(`[Worker ❌] dispatch_job RPC failed:`, dispatchError.message);
+                    if (!data.skipDispatch) {
+                        // ⚡ DISPATCH: Find eligible providers and create job_offers
+                        const { data: dispatchCount, error: dispatchError } = await supabaseAdmin
+                            .rpc('dispatch_job', { p_booking_id: data.bookingId });
+                        
+                        if (dispatchError) {
+                            console.error(`[Worker ❌] dispatch_job RPC failed:`, dispatchError.message);
+                        } else {
+                            console.warn(`[Worker 📡] dispatch_job created ${dispatchCount} offers for booking ${data.bookingId}`);
+                        }
                     } else {
-                        console.warn(`[Worker 📡] dispatch_job created ${dispatchCount} offers for booking ${data.bookingId}`);
+                        console.warn(`[Worker 📡] Skipping dispatch_job for batch booking ${data.bookingId}`);
                     }
 
                     // ⏰ Schedule a nudge in 5 mins if still searching

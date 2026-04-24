@@ -833,6 +833,8 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
                                 fastify.log.info({ bookingId: data.id }, '[Batch] Auto-cancelled: No providers found');
                             } else {
                                 fastify.log.info({ bookingId: data.id, offers: count }, '[Batch] Dispatched successfully');
+                                // Trigger notification worker (skip dispatch since we already did it)
+                                EventBus.publish('booking.created', { bookingId: data.id, skipDispatch: true }).catch(() => {});
                             }
                         } catch (e: any) {
                             fastify.log.error({ err: e.message, bookingId: data.id }, '[Batch] Dispatch failed');
