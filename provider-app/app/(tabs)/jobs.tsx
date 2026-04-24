@@ -210,9 +210,16 @@ export default function MyJobsScreen() {
         setJobs(curr => curr.map(j => j.id === job.id ? { ...j, status: job.status } : j));
         throw new Error(res.error);
       }
+      
+      // ⚡ Clear local cache for all relevant tabs to prevent stale data on re-focus
+      localCache.removeItem(`jobs:${activeTab}`);
+      localCache.removeItem('jobs:All');
+      localCache.removeItem('jobs:Active');
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // Bust cache so customer & provider get fresh status immediately
-      fetchJobs(true, true);
+      
+      // ⚡ Await fetchJobs to ensure UI is in sync with server state
+      await fetchJobs(true, true);
     } catch (e: any) { Alert.alert('Error', e.message); }
     finally { setActionLoading(null); }
   };
@@ -247,20 +254,29 @@ export default function MyJobsScreen() {
       if (uri) {
         setActionLoading(job.id);
         try {
-          // 🚀 Instantly update UI and start status update
+          // 🚀 Step 1: Instantly update UI and start status update
           setJobs(curr => curr.map(j => j.id === job.id ? { ...j, status: nextStatus } : j));
 
-          // Fire and forget status update (or handle in background)
-          api.patch(`/api/v1/bookings/${job.id}/status`, { status: nextStatus });
+          // Step 2: Clear local cache
+          localCache.removeItem(`jobs:${activeTab}`);
+          localCache.removeItem('jobs:All');
+          localCache.removeItem('jobs:Active');
 
-          // Photo upload happens in background
+          // Step 3: Wait for initial status update to backend
+          const res = await api.patch(`/api/v1/bookings/${job.id}/status`, { status: nextStatus });
+          if (res.error) throw new Error(res.error);
+
+          // Step 4: Photo upload happens in background
           uploadProof(uri, job.id, 'start').then(url => {
             if (url) api.patch(`/api/v1/bookings/${job.id}/status`, { status: nextStatus, proofUrl: url }).catch(() => { });
           }).catch(err => console.error('Background upload failed', err));
 
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          await fetchJobs(true, true);
         } catch (err: any) {
           Alert.alert('Process Error', err.message || 'Failed to update job status.');
+          // Rollback
+          setJobs(curr => curr.map(j => j.id === job.id ? { ...j, status: job.status } : j));
         }
         finally { setActionLoading(null); }
       }
@@ -285,18 +301,27 @@ export default function MyJobsScreen() {
       // 🚀 Step 1: Optimistic UI & Metadata Update
       setJobs(curr => curr.map(j => j.id === job.id ? { ...j, status: 'completed' } : j));
 
-      // Step 2: Immediate Status update to backend
-      api.patch(`/api/v1/bookings/${job.id}/status`, { status: 'completed' });
+      // Step 2: Clear local cache
+      localCache.removeItem(`jobs:${activeTab}`);
+      localCache.removeItem('jobs:All');
+      localCache.removeItem('jobs:Active');
+      localCache.removeItem('jobs:Completed');
 
-      // Step 3: Background Upload
+      // Step 3: Immediate Status update to backend
+      const res = await api.patch(`/api/v1/bookings/${job.id}/status`, { status: 'completed' });
+      if (res.error) throw new Error(res.error);
+
+      // Step 4: Background Upload
       uploadProof(uri, job.id, 'complete').then(url => {
         if (url) api.patch(`/api/v1/bookings/${job.id}/status`, { status: 'completed', proofUrl: url }).catch(() => { });
       }).catch(err => console.error('Background complete upload failed', err));
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      fetchJobs(true, true);
+      await fetchJobs(true, true);
     } catch (err: any) {
       Alert.alert('Completion Error', err.message || 'Failed to complete job.');
+      // Rollback
+      setJobs(curr => curr.map(j => j.id === job.id ? { ...j, status: job.status } : j));
     }
     finally { setActionLoading(null); }
   };

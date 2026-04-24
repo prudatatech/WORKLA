@@ -59,13 +59,19 @@ export const JobService = {
 
         logger.info({ providerId, bookingId }, '[JobService] Atomic acceptance successful');
 
-        // 🔥 Direct Cache Invalidation (no pattern matching to avoid Upstash KEYS blocking)
+        // 🔥 Direct Cache Invalidation (Enterprise Hardened)
         if (result.customer_id) {
-            cache.invalidate(`bookings:${result.customer_id}:customer:all:0:20`).catch(() => {});
-            cache.invalidate(`bookings:${result.customer_id}:customer:requested,searching:0:20`).catch(() => {});
+            const cId = result.customer_id;
+            cache.invalidate(`bookings:${cId}:customer:all:0:20`).catch(() => {});
+            cache.invalidate(`bookings:${cId}:customer:requested,searching:0:20`).catch(() => {});
+            cache.invalidate(`bookings:${cId}:customer:confirmed,en_route,arrived,in_progress:0:20`).catch(() => {});
         }
-        cache.invalidate(`bookings:${providerId}:provider:confirmed,en_route,arrived,in_progress:0:20`).catch(() => {});
-        cache.invalidate(`bookings:${providerId}:provider:all:0:20`).catch(() => {});
+        const pId = providerId;
+        cache.invalidate(`bookings:${pId}:provider:all:0:20`).catch(() => {});
+        cache.invalidate(`bookings:${pId}:provider:confirmed,en_route,arrived,in_progress:0:20`).catch(() => {});
+        // Also invalidate the specific "All" filter used by the provider app
+        cache.invalidate(`bookings:${pId}:provider:confirmed,en_route,arrived,in_progress,completed,cancelled:0:20`).catch(() => {});
+        cache.invalidate(`bookings:${pId}:provider:completed:0:20`).catch(() => {});
 
         // Fire event for notification
         EventBus.publish('booking.confirmed', {
@@ -98,13 +104,17 @@ export const JobService = {
 
         logger.info({ bookingId, providerId }, '[JobService] Manual Confirmation Successful');
 
-        // 🔥 Direct Cache Invalidation (no pattern matching)
+        // 🔥 Direct Cache Invalidation
         if (result.customer_id) {
-            cache.invalidate(`bookings:${result.customer_id}:customer:all:0:20`).catch(() => {});
-            cache.invalidate(`bookings:${result.customer_id}:customer:requested,searching:0:20`).catch(() => {});
+            const cId = result.customer_id;
+            cache.invalidate(`bookings:${cId}:customer:all:0:20`).catch(() => {});
+            cache.invalidate(`bookings:${cId}:customer:requested,searching:0:20`).catch(() => {});
+            cache.invalidate(`bookings:${cId}:customer:confirmed,en_route,arrived,in_progress:0:20`).catch(() => {});
         }
-        cache.invalidate(`bookings:${providerId}:provider:confirmed,en_route,arrived,in_progress:0:20`).catch(() => {});
-        cache.invalidate(`bookings:${providerId}:provider:all:0:20`).catch(() => {});
+        const pId = providerId;
+        cache.invalidate(`bookings:${pId}:provider:all:0:20`).catch(() => {});
+        cache.invalidate(`bookings:${pId}:provider:confirmed,en_route,arrived,in_progress:0:20`).catch(() => {});
+        cache.invalidate(`bookings:${pId}:provider:confirmed,en_route,arrived,in_progress,completed,cancelled:0:20`).catch(() => {});
 
         // 3. Notify
         EventBus.publish('booking.confirmed', {
@@ -237,16 +247,22 @@ export const JobService = {
 
         const updatedBooking = result.booking;
 
-        // 5. Shared side-effects: Direct Cache Invalidation (no pattern matching)
-        if (updatedBooking.customer_id) {
-            cache.invalidate(`bookings:${updatedBooking.customer_id}:customer:all:0:20`).catch(() => {});
-            cache.invalidate(`bookings:${updatedBooking.customer_id}:customer:confirmed,en_route,arrived,in_progress:0:20`).catch(() => {});
+        // 5. Shared side-effects: Direct Cache Invalidation
+        const cId = updatedBooking.customer_id;
+        const pId = updatedBooking.provider_id;
+
+        if (cId) {
+            cache.invalidate(`bookings:${cId}:customer:all:0:20`).catch(() => {});
+            cache.invalidate(`bookings:${cId}:customer:confirmed,en_route,arrived,in_progress:0:20`).catch(() => {});
+            cache.invalidate(`bookings:${cId}:customer:completed:0:20`).catch(() => {});
         }
-        if (updatedBooking.provider_id) {
-            cache.invalidate(`bookings:${updatedBooking.provider_id}:provider:all:0:20`).catch(() => {});
-            cache.invalidate(`bookings:${updatedBooking.provider_id}:provider:confirmed,en_route,arrived,in_progress:0:20`).catch(() => {});
-            cache.invalidate(`bookings:${updatedBooking.provider_id}:provider:completed:0:20`).catch(() => {});
-            cache.invalidate(`bookings:${updatedBooking.provider_id}:provider:cancelled:0:20`).catch(() => {});
+        if (pId) {
+            cache.invalidate(`bookings:${pId}:provider:all:0:20`).catch(() => {});
+            cache.invalidate(`bookings:${pId}:provider:confirmed,en_route,arrived,in_progress:0:20`).catch(() => {});
+            // Invalidate the exact string used by MyJobsScreen for the "All" tab
+            cache.invalidate(`bookings:${pId}:provider:confirmed,en_route,arrived,in_progress,completed,cancelled:0:20`).catch(() => {});
+            cache.invalidate(`bookings:${pId}:provider:completed:0:20`).catch(() => {});
+            cache.invalidate(`bookings:${pId}:provider:cancelled:0:20`).catch(() => {});
         }
 
         // 6. Shared side-effects: Event Publishing

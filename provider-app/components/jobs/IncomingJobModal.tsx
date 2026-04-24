@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { 
     Modal, 
     View, 
@@ -7,21 +7,15 @@ import {
     TouchableOpacity, 
     Animated, 
     Dimensions,
-    ActivityIndicator
+    ActivityIndicator,
+    PanResponder,
 } from 'react-native';
-import { MapPin, IndianRupee, X, Check } from 'lucide-react-native';
+import { MapPin, IndianRupee, X, ChevronRight } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PRIMARY = '#1A3FFF';
-
-interface IncomingJob {
-    offerId: string;
-    bookingId: string;
-    service: string;
-    address: string;
-    amount: number;
-    customerName?: string;
-}
+const SUCCESS = '#059669';
 
 interface IncomingJobModalProps {
     visible: boolean;
@@ -34,16 +28,80 @@ interface IncomingJobModalProps {
 export default function IncomingJobModal({ visible, jobData, onClose, onAccept, onReject }: IncomingJobModalProps) {
     const [loading, setLoading] = useState(false);
     const [countdown, setCountdown] = useState(60);
-    const [pulse] = useState(new Animated.Value(1));
-    const TIMEOUT_MS = 60000;
+    const [containerWidth, setContainerWidth] = useState(0);
+    
+    const pulse = useRef(new Animated.Value(1)).current;
+    const translateX = useRef(new Animated.Value(0)).current;
+    
+    const HANDLE_SIZE = 56;
+    const PADDING = 4;
+    const threshold = containerWidth ? (containerWidth - HANDLE_SIZE - PADDING * 2) * 0.85 : 150;
+
+    // Use refs to avoid stale closures in PanResponder
+    const stateRef = useRef({ loading, jobData, onAccept, threshold });
+    
+    useEffect(() => {
+        stateRef.current = { loading, jobData, onAccept, threshold };
+    }, [loading, jobData, onAccept, threshold]);
+
+    const handleAcceptInternal = async () => {
+        const { loading: isCurrentlyLoading, jobData: currentJobData, onAccept: currentOnAccept } = stateRef.current;
+        if (isCurrentlyLoading || !currentJobData) return;
+        
+        setLoading(true);
+        try {
+            const bookingId = currentJobData.bookingId || currentJobData.id;
+            await currentOnAccept(bookingId);
+        } catch (e) {
+            console.error('[IncomingJobModal] Accept failed:', e);
+            setLoading(false);
+            Animated.spring(translateX, {
+                toValue: 0,
+                useNativeDriver: true,
+            }).start();
+        }
+    };
+
+    const panResponder = useRef(
+        PanResponder.create({
+            onStartShouldSetPanResponder: () => true,
+            onMoveShouldSetPanResponder: () => true,
+            onPanResponderMove: (_, gestureState) => {
+                if (stateRef.current.loading) return;
+                const newX = Math.max(0, Math.min(gestureState.dx, stateRef.current.threshold + 20));
+                translateX.setValue(newX);
+            },
+            onPanResponderRelease: (_, gestureState) => {
+                if (stateRef.current.loading) return;
+                
+                if (gestureState.dx >= stateRef.current.threshold) {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    Animated.timing(translateX, {
+                        toValue: stateRef.current.threshold + 10,
+                        duration: 150,
+                        useNativeDriver: true,
+                    }).start(() => {
+                        handleAcceptInternal();
+                    });
+                } else {
+                    Animated.spring(translateX, {
+                        toValue: 0,
+                        useNativeDriver: true,
+                        tension: 50,
+                        friction: 8,
+                    }).start();
+                }
+            },
+        })
+    ).current;
 
     useEffect(() => {
         let timer: any;
         if (visible) {
             setCountdown(60);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            setLoading(false);
+            translateX.setValue(0);
             
-            // Pulse animation for urgency
             Animated.loop(
                 Animated.sequence([
                     Animated.timing(pulse, { toValue: 1.05, duration: 800, useNativeDriver: true }),
@@ -58,7 +116,7 @@ export default function IncomingJobModal({ visible, jobData, onClose, onAccept, 
             pulse.setValue(1);
         }
         return () => clearInterval(timer);
-    }, [visible, pulse]);
+    }, [visible]);
 
     useEffect(() => {
         if (visible && countdown === 0) {
@@ -66,28 +124,14 @@ export default function IncomingJobModal({ visible, jobData, onClose, onAccept, 
         }
     }, [visible, countdown, onClose]);
 
-    const handleAccept = async () => {
-        setLoading(true);
-        try {
-            onAccept(jobData.bookingId || jobData.id);
-        } finally {
-            setLoading(false);
-        }
-    };
-
     if (!jobData) return null;
 
-    // Normalize data keys
     const serviceName = jobData.service || jobData.serviceName || 'Service Request';
     const address = jobData.address || jobData.customer_address || 'Nearby Location';
     const amount = jobData.amount || jobData.estimatedPrice || '0';
 
     return (
-        <Modal
-            visible={visible}
-            transparent
-            animationType="fade"
-        >
+        <Modal visible={visible} transparent animationType="fade">
             <View style={styles.overlay}>
                 <Animated.View style={[styles.content, { transform: [{ scale: pulse }] }]}>
                     <View style={styles.countdownContainer}>
@@ -95,6 +139,14 @@ export default function IncomingJobModal({ visible, jobData, onClose, onAccept, 
                             <Text style={styles.countdownText}>{countdown}</Text>
                         </View>
                     </View>
+
+                    <TouchableOpacity 
+                        style={styles.closeBtn} 
+                        onPress={onReject || onClose}
+                        disabled={loading}
+                    >
+                        <X size={20} color="#94A3B8" />
+                    </TouchableOpacity>
 
                     <View style={styles.header}>
                         <View style={styles.badge}>
@@ -117,29 +169,36 @@ export default function IncomingJobModal({ visible, jobData, onClose, onAccept, 
                         </View>
                     </View>
 
-                    <View style={styles.actions}>
-                        <TouchableOpacity 
-                            style={styles.rejectBtn} 
-                            onPress={onReject || onClose}
-                            disabled={loading}
-                        >
-                            <Text style={styles.rejectText}>Decline</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity 
-                            style={styles.acceptBtn} 
-                            onPress={handleAccept}
-                            disabled={loading}
+                    <View 
+                        style={styles.swipeTrack}
+                        onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+                    >
+                        <Animated.Text style={[
+                            styles.swipeText, 
+                            { 
+                                opacity: translateX.interpolate({
+                                    inputRange: [0, threshold / 2],
+                                    outputRange: [1, 0],
+                                    extrapolate: 'clamp'
+                                })
+                            }
+                        ]}>
+                            Slide to Accept
+                        </Animated.Text>
+                        
+                        <Animated.View 
+                            style={[
+                                styles.swipeHandle,
+                                { transform: [{ translateX }] }
+                            ]}
+                            {...panResponder.panHandlers}
                         >
                             {loading ? (
-                                <ActivityIndicator color="#FFF" />
+                                <ActivityIndicator color="#FFF" size="small" />
                             ) : (
-                                <>
-                                    <Check size={20} color="#FFF" />
-                                    <Text style={styles.acceptText}>ACCEPT JOB</Text>
-                                </>
+                                <ChevronRight size={32} color="#FFF" />
                             )}
-                        </TouchableOpacity>
+                        </Animated.View>
                     </View>
                 </Animated.View>
             </View>
@@ -158,16 +217,30 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFF',
         borderRadius: 32,
         padding: 24,
+        paddingTop: 40,
         alignItems: 'center',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 20 },
         shadowOpacity: 0.2,
         shadowRadius: 30,
         elevation: 15,
+        position: 'relative'
+    },
+    closeBtn: {
+        position: 'absolute',
+        top: 20,
+        right: 20,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#F1F5F9',
+        justifyContent: 'center',
+        alignItems: 'center'
     },
     countdownContainer: {
-        marginTop: -60,
-        marginBottom: 20,
+        position: 'absolute',
+        top: -40,
+        alignSelf: 'center'
     },
     countdownCircle: {
         width: 80,
@@ -225,7 +298,7 @@ const styles = StyleSheet.create({
         padding: 20,
         borderRadius: 24,
         alignItems: 'center',
-        marginBottom: 24,
+        marginBottom: 32,
         borderWidth: 1,
         borderColor: '#CCFBF1'
     },
@@ -245,43 +318,35 @@ const styles = StyleSheet.create({
         fontWeight: '900',
         color: '#0F766E'
     },
-    actions: {
-        flexDirection: 'row',
-        gap: 12,
-        width: '100%'
-    },
-    rejectBtn: {
-        flex: 1,
-        height: 60,
-        borderRadius: 16,
-        borderWidth: 2,
-        borderColor: '#F1F5F9',
-        backgroundColor: '#F8FAFC',
+    swipeTrack: {
+        width: '100%',
+        height: 64,
+        backgroundColor: '#F1F5F9',
+        borderRadius: 32,
         justifyContent: 'center',
-        alignItems: 'center'
+        padding: 4,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        position: 'relative'
     },
-    rejectText: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#94A3B8'
-    },
-    acceptBtn: {
-        flex: 2,
-        flexDirection: 'row',
+    swipeHandle: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: SUCCESS,
+        justifyContent: 'center',
         alignItems: 'center',
-        gap: 10,
-        justifyContent: 'center',
-        height: 60,
-        borderRadius: 16,
-        backgroundColor: '#059669',
-        shadowColor: '#059669',
-        shadowOpacity: 0.4,
-        shadowRadius: 15,
-        elevation: 10
+        shadowColor: SUCCESS,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 5,
     },
-    acceptText: {
-        color: '#FFF',
-        fontSize: 17,
-        fontWeight: '900'
+    swipeText: {
+        position: 'absolute',
+        alignSelf: 'center',
+        fontSize: 16,
+        fontWeight: '800',
+        color: '#94A3B8',
     }
 });

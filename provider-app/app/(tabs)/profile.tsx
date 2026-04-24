@@ -91,6 +91,15 @@ export default function ProviderProfileScreen() {
     };
 
     const handleSignOut = async () => {
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                // Clear push token so we stop receiving notifications after logout
+                await supabase.from('profiles').update({ expo_push_token: null }).eq('id', user.id);
+            }
+        } catch (e) {
+            console.error('Error clearing push token:', e);
+        }
         await supabase.auth.signOut();
         router.replace('/');
     };
