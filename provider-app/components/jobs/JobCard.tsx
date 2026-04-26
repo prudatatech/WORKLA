@@ -59,7 +59,14 @@ export default function JobCard({ item, actionLoading, confirmJobId, onAdvance, 
           </View>
         </View>
         <View style={styles.contactActions}>
-          <TouchableOpacity style={styles.contactBtn} onPress={() => Linking.openURL(`tel:${customer?.phone}`)}>
+          <TouchableOpacity 
+            style={styles.contactBtn} 
+            onPress={() => {
+              const raw = (customer?.phone || '').replace(/\D/g, '');
+              const tel = raw.startsWith('91') && raw.length > 10 ? `+${raw}` : (raw.length === 10 ? `+91${raw}` : raw);
+              Linking.openURL(`tel:${tel}`);
+            }}
+          >
             <Phone size={16} color={PRIMARY} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.contactBtn} onPress={() => router.push({ pathname: '/chat/[id]', params: { id: item.id } } as any)}>

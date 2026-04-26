@@ -131,11 +131,11 @@ export class InvoiceService {
             doc.text('Bangalore, Karnataka - 560102');
 
             doc.fillColor('#6B7280').text('BILL TO:', 350, 130);
-            doc.font('Helvetica-Bold').fillColor('#111827').text(data.customer_name, 350, 145).font('Helvetica');
-            doc.text(`Phone: ${data.customer_phone}`);
-            if (data.customer_gstin) doc.text(`GSTIN: ${data.customer_gstin}`);
-            doc.text(`State: ${data.customer_place_of_supply || 'Not Specified'}`);
-            doc.text(data.customer_address || 'Address snapshot per booking', { width: 200 });
+            doc.font('Helvetica-Bold').fillColor('#111827').text(String(data.customer_name || 'Customer'), 350, 145).font('Helvetica');
+            doc.text(`Phone: ${String(data.customer_phone || '')}`);
+            if (data.customer_gstin) doc.text(`GSTIN: ${String(data.customer_gstin)}`);
+            doc.text(`State: ${String(data.customer_place_of_supply || 'Not Specified')}`);
+            doc.text(String(data.customer_address || 'Address snapshot per booking'), { width: 200 });
 
             // --- Table ---
             const tableTop = 250;
@@ -147,34 +147,34 @@ export class InvoiceService {
 
             doc.fillColor('#111827');
             const itemY = tableTop + 35;
-            doc.text(data.service_name, 60, itemY);
-            doc.text(data.sac_code || '9987', 300, itemY);
-            const taxableValue = (data.total_amount - data.tax_amount).toFixed(2);
+            doc.text(String(data.service_name || 'Home Service'), 60, itemY);
+            doc.text(String(data.sac_code || '9987'), 300, itemY);
+            const taxableValue = (Number(data.total_amount || 0) - Number(data.tax_amount || 0)).toFixed(2);
             doc.text(taxableValue, 450, itemY, { align: 'right' });
 
             doc.moveTo(50, itemY + 20).lineTo(550, itemY + 20).stroke('#F3F4F6');
 
             // --- Totals ---
             const summaryY = itemY + 40;
-            const isIGST = data.customer_place_of_supply && data.customer_place_of_supply.toLowerCase() !== 'karnataka';
+            const isIGST = data.customer_place_of_supply && String(data.customer_place_of_supply).toLowerCase() !== 'karnataka';
             
             doc.text('Taxable Value', 350, summaryY);
             doc.text(taxableValue, 450, summaryY, { align: 'right' });
 
             if (isIGST) {
                 doc.text('IGST (18%)', 350, summaryY + 20);
-                doc.text(data.tax_amount.toString(), 450, summaryY + 20, { align: 'right' });
+                doc.text(String(data.tax_amount || 0), 450, summaryY + 20, { align: 'right' });
             } else {
                 doc.text('CGST (9%)', 350, summaryY + 20);
-                doc.text(data.cgst.toString(), 450, summaryY + 20, { align: 'right' });
+                doc.text(String(data.cgst || 0), 450, summaryY + 20, { align: 'right' });
                 doc.text('SGST (9%)', 350, summaryY + 40);
-                doc.text(data.sgst.toString(), 450, summaryY + 40, { align: 'right' });
+                doc.text(String(data.sgst || 0), 450, summaryY + 40, { align: 'right' });
             }
 
             doc.moveTo(350, summaryY + 55).lineTo(550, summaryY + 55).stroke('#111827');
             
             doc.font('Helvetica-Bold').fontSize(12).fillColor(accentColor).text(isCreditNote ? 'Credit Amount' : 'Total Amount', 350, summaryY + 65).font('Helvetica');
-            doc.font('Helvetica-Bold').fontSize(12).text(`INR ${data.total_amount}`, 450, summaryY + 65, { align: 'right' }).font('Helvetica');
+            doc.font('Helvetica-Bold').fontSize(12).text(`INR ${String(data.total_amount || 0)}`, 450, summaryY + 65, { align: 'right' }).font('Helvetica');
 
             // --- Professional Polish ---
             // QR Code at bottom right

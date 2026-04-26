@@ -297,8 +297,38 @@ export default function OnboardingScreen() {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.title}>Provider Setup</Text>
-                <Text style={styles.subtitle}>Step {step} of {TOTAL_STEPS}</Text>
+                <View style={styles.headerTop}>
+                    <TouchableOpacity 
+                        style={styles.backBtn} 
+                        onPress={() => {
+                            if (step > 1) {
+                                setStep(step - 1);
+                            } else {
+                                Alert.alert(
+                                    'Change Number?',
+                                    'Do you want to go back and change your mobile number? You will be signed out.',
+                                    [
+                                        { text: 'Cancel', style: 'cancel' },
+                                        { 
+                                            text: 'Yes, Change', 
+                                            style: 'destructive',
+                                            onPress: async () => {
+                                                await supabase.auth.signOut();
+                                                router.replace('/');
+                                            }
+                                        }
+                                    ]
+                                );
+                            }
+                        }}
+                    >
+                        <ChevronRight color="#FFF" size={24} style={{ transform: [{ rotate: '180deg' }] }} />
+                    </TouchableOpacity>
+                    <View>
+                        <Text style={styles.title}>Provider Setup</Text>
+                        <Text style={styles.subtitle}>Step {step} of {TOTAL_STEPS}</Text>
+                    </View>
+                </View>
             </View>
 
             <View style={styles.progressContainer}>
@@ -507,6 +537,19 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
         paddingBottom: 20,
         backgroundColor: '#0056FF',
+    },
+    headerTop: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 16,
+    },
+    backBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     title: {
         fontSize: 24,

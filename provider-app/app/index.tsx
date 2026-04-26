@@ -280,6 +280,8 @@ export default function ProviderAuthScreen() {
                                 placeholder="••••••"
                                 maxLength={6}
                                 autoFocus
+                                textContentType="oneTimeCode"
+                                autoComplete="sms-otp"
                             />
                         </View>
                         <TouchableOpacity 
@@ -290,6 +292,16 @@ export default function ProviderAuthScreen() {
                             <Text style={[styles.resendText, timer > 0 && styles.resendDisabled]}>
                                 {timer > 0 ? `Resend OTP in ${timer}s` : 'Resend OTP'}
                             </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity 
+                            style={[styles.resendBtn, { marginTop: 12 }]} 
+                            onPress={() => {
+                                setMode('phone');
+                                setOtp('');
+                            }}
+                        >
+                            <Text style={[styles.resendText, { color: '#666' }]}>Change Mobile Number</Text>
                         </TouchableOpacity>
                     </View>
                 )}

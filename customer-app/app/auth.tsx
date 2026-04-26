@@ -337,6 +337,8 @@ export default function AuthScreen() {
                                     keyboardType="number-pad"
                                     maxLength={6}
                                     autoFocus
+                                    textContentType="oneTimeCode"
+                                    autoComplete="sms-otp"
                                 />
                             </View>
                             <TouchableOpacity 

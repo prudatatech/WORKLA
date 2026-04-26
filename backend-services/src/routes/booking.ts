@@ -729,9 +729,12 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
                 const { data: booking } = await supabaseAdmin.from('bookings').select('status, customer_id').eq('id', id).single();
                 if (booking?.status === 'completed' && booking.customer_id === user.sub) {
                     const result = await InvoiceService.generateInvoice(id);
-                    const { data: signed } = await supabaseAdmin.storage
+                    const { data: signed, error: sError } = await supabaseAdmin.storage
                         .from('invoices')
                         .createSignedUrl(result.path, 600); // 10 mins
+                    
+                    if (sError || !signed?.signedUrl) throw new Error('FAILED_TO_SIGN_URL');
+                    
                     return reply.send({ success: true, invoiceUrl: signed?.signedUrl, invoiceNumber: result.invoiceNumber, invoiceType: 'INVOICE' } as any);
                 }
                 return reply.code(404).send({ error: 'INVOICE_NOT_FOUND', details: 'Invoice not generated for this booking yet.' } as any);
@@ -745,9 +748,12 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
             // 3. storage_path is null = PDF was never uploaded successfully → re-generate
             if (!invoice.storage_path) {
                 const result = await InvoiceService.generateInvoice(id);
-                const { data: signed } = await supabaseAdmin.storage
+                const { data: signed, error: sError } = await supabaseAdmin.storage
                     .from('invoices')
                     .createSignedUrl(result.path, 600);
+
+                if (sError || !signed?.signedUrl) throw new Error('FAILED_TO_SIGN_URL');
+
                 return reply.send({ success: true, invoiceUrl: signed?.signedUrl, invoiceNumber: result.invoiceNumber, invoiceType: invoice.invoice_type || 'INVOICE' } as any);
             }
 

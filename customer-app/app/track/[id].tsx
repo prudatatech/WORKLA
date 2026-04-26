@@ -18,13 +18,16 @@ import {
     Alert,
     Animated,
     AppState,
+    LayoutAnimation,
     Linking,
+    Platform,
     ScrollView,
     Share,
     StatusBar,
     StyleSheet,
     Text,
     TouchableOpacity,
+    UIManager,
     View
 } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
@@ -39,6 +42,10 @@ import { initiateCall } from '../../lib/phone';
 import { socketService } from '../../lib/socket';
 import { supabase } from '../../lib/supabase';
 import EmptyState from '../../components/EmptyState';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const PRIMARY = '#1A3FFF';
 
@@ -127,6 +134,7 @@ export default function TrackingScreen() {
             if (res.error) throw new Error(res.error);
 
             const data = res.data;
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
             setBooking(data);
             bookingRef.current = data; // Sync ref immediately
 
@@ -229,15 +237,18 @@ export default function TrackingScreen() {
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bookings', filter: `id=eq.${id}` }, (payload) => {
                 console.log('[Real-time 🚀] Status update:', payload.new.status);
                 
-                // 1. Instantly update status to stop searching/radar
-                setBooking((prev: any) => ({ ...prev, ...payload.new }));
+                const newBooking = payload.new as any;
+                if (!newBooking) return;
+                
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                setBooking((prev: any) => ({ ...prev, ...newBooking }));
 
-                if (payload.new.status === 'confirmed') {
+                if (newBooking.status === 'confirmed') {
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                     
                     // 🚀 SPEED OPTIMIZATION: Try to find the provider name in our existing offers list 
                     // so we don't have to wait for the API refresh to show "Partner Found Kushagra..."
-                    const matchingOffer = offers.find(o => o.provider_id === payload.new.provider_id);
+                    const matchingOffer = offers.find(o => o.provider_id === newBooking.provider_id);
                     if (matchingOffer) {
                         const name = matchingOffer.provider_details?.profiles?.full_name || 
                                      matchingOffer.provider_details?.business_name;
@@ -252,16 +263,16 @@ export default function TrackingScreen() {
                     
                     setShowProviderFound(true);
                     // ⏲️ Auto-dismiss after 8s to show map automatically
-                    setTimeout(() => setShowProviderFound(false), 8000);
+                    setTimeout(() => setShowProviderFound(false), 4000);
                 }
 
-                if (['en_route', 'arrived', 'in_progress', 'completed'].includes(payload.new.status)) {
+                if (['en_route', 'arrived', 'in_progress', 'completed'].includes(newBooking.status)) {
                     setShowProviderFound(false);
                     
                     // 📳 Production-level Haptics
-                    if (payload.new.status === 'arrived') {
+                    if (newBooking.status === 'arrived') {
                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                    } else if (payload.new.status === 'in_progress') {
+                    } else if (newBooking.status === 'in_progress') {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                     } else if (payload.new.status === 'completed') {
                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -375,13 +386,32 @@ export default function TrackingScreen() {
         setInvoiceLoading(true);
         try {
             let res = await api.get(`/api/v1/bookings/${id}/invoice`) as any;
-            if (res.error) {
-                await new Promise(r => setTimeout(r, 2000));
+            
+            // If it's a 404 or specific "Not Ready" error, retry once
+            if (res.error === 'INVOICE_NOT_FOUND' || res.status === 404) {
+                await new Promise(r => setTimeout(r, 2500));
                 res = await api.get(`/api/v1/bookings/${id}/invoice`) as any;
             }
-            if (res.error) { Alert.alert('Not Ready Yet', 'Invoice is still being generated. Please try again in a few seconds.'); return; }
-            if (res.invoiceUrl) Linking.openURL(res.invoiceUrl);
-        } catch (err) { Alert.alert('Error', 'Failed to fetch invoice. Please try again.'); } finally { setInvoiceLoading(false); }
+
+            if (res.error) {
+                if (res.error === 'INVOICE_NOT_FOUND') {
+                    Alert.alert('Processing...', 'Your invoice is being generated. Please wait a few seconds and try again.');
+                } else {
+                    Alert.alert('Download Failed', `We couldn't fetch your invoice: ${res.error || 'Server error'}. Please contact support if this persists.`);
+                }
+                return;
+            }
+
+            if (res.invoiceUrl) {
+                Linking.openURL(res.invoiceUrl);
+            } else {
+                throw new Error('MISSING_URL');
+            }
+        } catch (err) {
+            Alert.alert('Error', 'Failed to fetch the invoice link. Please try again later.');
+        } finally {
+            setInvoiceLoading(false);
+        }
     };
 
     const handleSOS = async () => {

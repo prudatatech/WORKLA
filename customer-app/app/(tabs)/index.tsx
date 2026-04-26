@@ -5,11 +5,14 @@ import {
   AppState,
   AppStateStatus,
   Dimensions,
+  LayoutAnimation,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  UIManager,
   View,
 } from 'react-native';
 import { Banner } from '../../components/BannerCarousel';
@@ -28,6 +31,10 @@ import { ChevronRight } from 'lucide-react-native';
 import { PRIMARY, getBgForCategory, getColorForCategory, getIconForCategory } from '../../lib/ui-constants';
 
 const { width } = Dimensions.get('window');
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const SECTION_NAV = [
   { key: 'all', label: 'All Services', emoji: '🏠' },
@@ -213,27 +220,6 @@ export default function HomeScreen() {
             setActiveBookings([]);
           }
           if (Array.isArray(draftRes.data)) setDrafts(draftRes.data);
-
-          // 🚀 REMOVED: Automatic GPS detection on every load. 
-          // We now rely on persisted 'selectedAddress' from useAddressStore.
-          // This saves battery and respects the user's manually chosen location.
-          /* 
-          try {
-            const { status } = await Location.requestForegroundPermissionsAsync();
-            if (status === 'granted') {
-              let loc = await Location.getLastKnownPositionAsync({});
-              if (!loc) loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-              if (loc) {
-                const savedAddrs = (addressRes.data || []).map((a: any) => ({
-                  id: a.id, label: a.label, name: a.name, address: a.full_address, latitude: a.latitude, longitude: a.longitude
-                }));
-                autoDetectAddress(loc.coords.latitude, loc.coords.longitude, savedAddrs);
-              }
-            }
-          } catch {
-            console.warn('[Home] GPS unavailable, skipping location update');
-          }
-          */
         } catch (phase2Err) {
           console.error('Background error:', phase2Err);
         }
@@ -277,12 +263,12 @@ export default function HomeScreen() {
           
           console.log('[Real-time 📢] Active booking update:', payload.eventType, (payload.new as any)?.status);
           
+          const booking = (payload.new || payload.old) as any;
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            const booking = payload.new as any;
             const activeStatuses = ['requested', 'searching', 'confirmed', 'en_route', 'arrived', 'in_progress'];
             
             if (activeStatuses.includes(booking.status)) {
-              // Re-fetch with joined provider data to ensure name reflects correctly
+              // Re-fetch with joined provider data
               const { data: active } = await supabase
                 .from('bookings')
                 .select('id, status, service_name_snapshot, booking_number, batch_id, provider_id, provider_details(business_name, avg_rating, profiles(full_name))')
@@ -292,14 +278,16 @@ export default function HomeScreen() {
                 .limit(3);
               
               if (active && active.length > 0 && !isBannerDismissedThisSession) {
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                 setActiveBookings(active);
-                Animated.spring(bannerSlide, { toValue: 0, useNativeDriver: true, speed: 10 }).start();
+                Animated.timing(bannerSlide, { toValue: 0, useNativeDriver: true, duration: 400 }).start();
               }
             } else if (booking.status === 'completed' || booking.status === 'cancelled') {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
               setActiveBookings(prev => {
                 const filtered = prev.filter(b => b.id !== booking.id);
                 if (filtered.length === 0) {
-                  Animated.timing(bannerSlide, { toValue: 150, useNativeDriver: true, duration: 200 }).start();
+                  Animated.timing(bannerSlide, { toValue: 150, useNativeDriver: true, duration: 300 }).start();
                 }
                 return filtered;
               });
