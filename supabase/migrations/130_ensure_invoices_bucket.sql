@@ -18,6 +18,18 @@ CREATE TABLE IF NOT EXISTS public.invoices (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Ensure sequential invoice number generator exists
+CREATE OR REPLACE FUNCTION public.generate_invoice_number()
+RETURNS TEXT AS $$
+DECLARE
+    v_year TEXT := TO_CHAR(NOW(), 'YYYY');
+    v_count INTEGER;
+BEGIN
+    SELECT COUNT(*) + 1 INTO v_count FROM public.invoices WHERE TO_CHAR(created_at, 'YYYY') = v_year;
+    RETURN 'WK-' || v_year || '-' || LPAD(COALESCE(v_count, 1)::TEXT, 5, '0');
+END;
+$$ LANGUAGE plpgsql;
+
 -- Ensure RLS is enabled on the table
 ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
 

@@ -33,7 +33,12 @@ export class InvoiceService {
                 if (bError || !booking) throw new Error('BOOKING_NOT_FOUND');
 
                 const tax = Number(booking.tax_amount || 0);
-                const { data: invNum } = await supabaseAdmin.rpc('generate_invoice_number');
+                const { data: invNum, error: genError } = await supabaseAdmin.rpc('generate_invoice_number');
+                
+                if (genError || !invNum) {
+                    console.error('[InvoiceService] Failed to generate invoice number:', genError);
+                    throw new Error('INVOICE_NUMBER_GENERATION_FAILED');
+                }
 
                 const { error: invError } = await supabaseAdmin
                     .from('invoices')
