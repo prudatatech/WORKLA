@@ -82,31 +82,47 @@ export default function ActiveBookingBanner({ activeBookings, bannerSlide, onDis
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.cardsScroll}
         >
-          {activeBookings.map((booking) => {
-            const meta = STATUS_LABEL[booking.status] ?? STATUS_LABEL['searching'];
-            return (
-              <TouchableOpacity
-                key={booking.id}
-                style={[styles.card, activeBookings.length === 1 && styles.cardFull]}
-                activeOpacity={0.82}
-                onPress={() => navigateTo(booking)}
-              >
-                {/* Color accent bar */}
-                <View style={[styles.cardAccent, { backgroundColor: meta.dot }]} />
-                <View style={styles.cardContent}>
-                  <Text style={styles.cardService} numberOfLines={1}>{booking.service_name_snapshot}</Text>
-                  <View style={styles.cardStatusRow}>
-                    <View style={[styles.statusDot, { backgroundColor: meta.dot }]} />
-                    <Text style={[styles.cardStatus, { color: meta.dot }]}>{meta.label}</Text>
+            {activeBookings.map((booking) => {
+              const meta = STATUS_LABEL[booking.status] ?? STATUS_LABEL['searching'];
+              const providerName = booking.profiles?.full_name || booking.provider_details?.business_name || booking.provider_details?.profiles?.full_name;
+              const title = providerName || booking.service_name_snapshot || 'Service';
+              const initial = title.charAt(0).toUpperCase();
+              const subTitle = providerName ? booking.service_name_snapshot : 'Finding the best partner...';
+
+              return (
+                <TouchableOpacity
+                  key={booking.id}
+                  style={[styles.card, activeBookings.length === 1 && styles.cardFull]}
+                  activeOpacity={0.82}
+                  onPress={() => navigateTo(booking)}
+                >
+                  <View style={styles.cardContent}>
+                    <View style={styles.providerRow}>
+                      <View style={[styles.avatarCircle, { borderColor: meta.dot }]}>
+                        <Text style={styles.avatarInitial}>{initial}</Text>
+                      </View>
+                      <View style={styles.textContainer}>
+                        <Text style={styles.cardService} numberOfLines={1}>{title}</Text>
+                        <View style={styles.cardStatusRow}>
+                          <View style={[styles.statusDot, { backgroundColor: meta.dot }]} />
+                          <Text style={[styles.cardStatus, { color: meta.dot }]}>{meta.label}</Text>
+                          {booking.status === 'en_route' && <Text style={{ fontSize: 11 }}>🚗</Text>}
+                        </View>
+                        <Text style={styles.subTitleText} numberOfLines={1}>{subTitle}</Text>
+                      </View>
+                    </View>
+                    {/* Progress Bar Placeholder */}
+                    <View style={styles.progressBarBg}>
+                      <View style={[styles.progressBarFill, { backgroundColor: meta.dot, width: getProgressWidth(booking.status) }]} />
+                    </View>
                   </View>
-                </View>
-                <View style={styles.trackBtn}>
-                  <Navigation size={11} color="#FFF" />
-                  <Text style={styles.trackText}>Track</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
+                  <View style={styles.trackBtn}>
+                    <Navigation size={12} color="#FFF" />
+                    <Text style={styles.trackText}>Track</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
         </ScrollView>
       </View>
     </Animated.View>
@@ -116,61 +132,102 @@ export default function ActiveBookingBanner({ activeBookings, bannerSlide, onDis
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: 100, // Above tab bar
-    left: 12,
-    right: 12,
+    bottom: 94, // Fixed above the tab bar
+    left: 14,
+    right: 14,
     backgroundColor: '#0F172A',
-    borderRadius: 24,
+    borderRadius: 28,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: 'rgba(255,255,255,0.15)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.4,
-    shadowRadius: 24,
-    elevation: 20,
-    zIndex: 1000,
+    shadowOffset: { width: 0, height: 15 },
+    shadowOpacity: 0.5,
+    shadowRadius: 30,
+    elevation: 24,
+    zIndex: 9999,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 6,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 4,
   },
   liveRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981' },
-  liveText: { fontSize: 10, fontWeight: '900', color: '#10B981', letterSpacing: 1.2 },
-  headerTitle: { fontSize: 12, fontWeight: '800', color: '#F1F5F9', flex: 1, textAlign: 'center' },
-  scrollWrapper: { paddingBottom: 12 },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#10B981' },
+  liveText: { fontSize: 10, fontWeight: '900', color: '#10B981', letterSpacing: 1.5 },
+  headerTitle: { fontSize: 12, fontWeight: '700', color: '#94A3B8', flex: 1, textAlign: 'center' },
+  scrollWrapper: { paddingBottom: 14 },
   cardsScroll: { paddingHorizontal: 12, gap: 10 },
   card: {
-    width: 220,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 16,
+    width: 280,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 22,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
     flexDirection: 'row',
     alignItems: 'center',
+    paddingRight: 14,
   },
   cardFull: { width: Dimensions.get('window').width - 48 },
-  cardAccent: { width: 4, alignSelf: 'stretch' },
-  cardContent: { flex: 1, paddingHorizontal: 12, paddingVertical: 10 },
-  cardService: { fontSize: 13, fontWeight: '800', color: '#F8FAFC', marginBottom: 2 },
+  cardContent: { flex: 1, paddingLeft: 14, paddingVertical: 14 },
+  providerRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  avatarCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarInitial: { fontSize: 20, fontWeight: '900', color: '#FFF' },
+  textContainer: { flex: 1, gap: 1 },
+  cardService: { fontSize: 16, fontWeight: '900', color: '#FFF', letterSpacing: -0.4 },
   cardStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  statusDot: { width: 5, height: 5, borderRadius: 2.5 },
-  cardStatus: { fontSize: 11, fontWeight: '700' },
+  statusDot: { width: 7, height: 7, borderRadius: 3.5 },
+  cardStatus: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.6 },
+  subTitleText: { fontSize: 11, color: '#94A3B8', fontWeight: '500', marginTop: 1 },
   trackBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
     backgroundColor: PRIMARY,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginRight: 10,
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    shadowColor: PRIMARY,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 8,
   },
-  trackText: { fontSize: 11, fontWeight: '800', color: '#FFF' },
+  trackText: { fontSize: 12, fontWeight: '900', color: '#FFF' },
+  progressBarBg: {
+    height: 3,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 2,
+    marginTop: 10,
+    width: '100%',
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
 });
+
+function getProgressWidth(status: string): string {
+  switch (status) {
+    case 'requested': return '15%';
+    case 'searching': return '30%';
+    case 'confirmed': return '50%';
+    case 'en_route': return '75%';
+    case 'arrived': return '90%';
+    case 'in_progress': return '95%';
+    default: return '0%';
+  }
+}

@@ -15,6 +15,13 @@ EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'notifications realtime: %', SQLERRM;
 END $$;
 
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.bookings;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'bookings realtime: %', SQLERRM;
+END $$;
+
 NOTIFY pgrst, 'reload schema';
 
 -- Verify

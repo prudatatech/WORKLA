@@ -187,7 +187,7 @@ export default function JobMarketplace() {
 
             <TouchableOpacity
               style={s.activeJobBtn}
-              onPress={() => router.push(`/track/${activeJobId}` as any)}
+              onPress={() => router.push('/(tabs)/jobs' as any)}
             >
               <Text style={s.activeJobBtnText}>Go to Active Job</Text>
               <ExternalLink size={18} color="#FFF" />

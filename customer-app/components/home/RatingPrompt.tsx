@@ -5,14 +5,14 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { PRIMARY } from '../../lib/ui-constants';
 
 interface RatingPromptProps {
-  unratedBooking: any;
-  onDismiss: () => void;
+  booking: any;
+  onClose: () => void;
 }
 
-export default function RatingPrompt({ unratedBooking, onDismiss }: RatingPromptProps) {
+export default function RatingPrompt({ booking, onClose }: RatingPromptProps) {
   const router = useRouter();
 
-  if (!unratedBooking) return null;
+  if (!booking) return null;
 
   return (
     <View style={styles.ratingPrompt}>
@@ -23,17 +23,17 @@ export default function RatingPrompt({ unratedBooking, onDismiss }: RatingPrompt
         <View style={{ flex: 1 }}>
           <Text style={styles.ratingPromptTitle}>Rate your last service</Text>
           <Text style={styles.ratingPromptSub} numberOfLines={1}>
-            How was {unratedBooking.service_name_snapshot} by {unratedBooking.provider_details?.business_name || 'Worker'}?
+            How was {booking.service_name_snapshot} by {booking.provider_details?.business_name || 'Worker'}?
           </Text>
         </View>
       </View>
       <TouchableOpacity
         style={styles.ratingPromptBtn}
-        onPress={() => router.push(`/rate/${unratedBooking.id}` as any)}
+        onPress={() => router.push(`/rate/${booking.id}` as any)}
       >
         <Text style={styles.ratingPromptBtnText}>Rate Now</Text>
       </TouchableOpacity>
-      <TouchableOpacity onPress={onDismiss} style={styles.ratingDismiss}>
+      <TouchableOpacity onPress={onClose} style={styles.ratingDismiss}>
         <X size={14} color="#9CA3AF" />
       </TouchableOpacity>
     </View>

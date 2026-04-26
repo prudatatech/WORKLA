@@ -4,7 +4,6 @@ import {
     ArrowLeft,
     Check,
     MessageSquare,
-    Navigation2,
     Phone,
     Share2,
     Shield,
@@ -19,7 +18,6 @@ import {
     Alert,
     Animated,
     AppState,
-    Image,
     Linking,
     ScrollView,
     Share,
@@ -64,6 +62,7 @@ export default function TrackingScreen() {
 
     const [loading, setLoading] = useState(true);
     const [booking, setBooking] = useState<any>(null);
+    const bookingRef = useRef<any>(null);
     const [offers, setOffers] = useState<any[]>([]);
     const [providerLocation, setProviderLocation] = useState<{ latitude: number; longitude: number } | null>(null);
     const [eta, setEta] = useState('...'); 
@@ -85,6 +84,41 @@ export default function TrackingScreen() {
         ).start();
     }, [pulseAnim]);
 
+    const updateETA = useCallback((pLat: number, pLng: number) => {
+        const b = bookingRef.current;
+        if (!b?.customer_latitude || !b?.customer_longitude) return;
+
+        // Haversine distance in km
+        const R = 6371;
+        const dLat = (pLat - b.customer_latitude) * Math.PI / 180;
+        const dLng = (pLng - b.customer_longitude) * Math.PI / 180;
+        const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(b.customer_latitude * Math.PI / 180) * Math.cos(pLat * Math.PI / 180) *
+            Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const distance = R * c;
+
+        // Traffic heuristic: 1km = ~3.5 mins
+        let mins = 0;
+        if (distance < 0.2) {
+            setEta('Arrived');
+            return;
+        } else if (distance < 1) {
+            mins = Math.round(distance * 5) + 2;
+        } else {
+            mins = Math.round(distance * 3.5) + 3;
+        }
+
+        // Cap at reasonable limits
+        if (mins < 1) mins = 1;
+        if (mins > 60) {
+            setEta('> 1 hr');
+        } else {
+            setEta(`${mins} min`);
+        }
+    }, []);
+
     const loadBooking = useCallback(async (showLoading = true, forceRefresh = false) => {
         if (showLoading) setLoading(true);
         try {
@@ -94,6 +128,7 @@ export default function TrackingScreen() {
 
             const data = res.data;
             setBooking(data);
+            bookingRef.current = data; // Sync ref immediately
 
             if (data.status === 'confirmed') {
                 setShowProviderFound(true);
@@ -152,11 +187,11 @@ export default function TrackingScreen() {
         } finally {
             if (showLoading) setLoading(false);
         }
-    }, [id]);
+    }, [id, updateETA]);
 
     useEffect(() => {
         if (id) loadBooking();
-    }, [id, loadBooking]);
+    }, [id]); // Only run on mount or if ID changes
 
     useEffect(() => {
         const isSearching = booking ? ['requested', 'searching'].includes(booking.status) : true;
@@ -185,43 +220,6 @@ export default function TrackingScreen() {
         };
         const interval = setInterval(checkTimeout, 10000);
         return () => clearInterval(interval);
-    }, [booking]);
-
-    const updateETA = useCallback((pLat: number, pLng: number) => {
-        if (!booking?.customer_latitude || !booking?.customer_longitude) return;
-
-        // Haversine distance in km
-        const R = 6371;
-        const dLat = (pLat - booking.customer_latitude) * Math.PI / 180;
-        const dLng = (pLng - booking.customer_longitude) * Math.PI / 180;
-        const a =
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(booking.customer_latitude * Math.PI / 180) * Math.cos(pLat * Math.PI / 180) *
-            Math.sin(dLng / 2) * Math.sin(dLng / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        const distance = R * c;
-
-        // 🧠 Improved city traffic heuristic
-        // < 0.5km: "Arriving"
-        // < 2km: ~4 mins per km + 2 mins buffer
-        // > 2km: ~3.5 mins per km + 3 mins buffer
-        let mins = 0;
-        if (distance < 0.3) {
-            setEta('Arriving');
-            return;
-        } else if (distance < 2) {
-            mins = Math.round(distance * 4) + 2;
-        } else {
-            mins = Math.round(distance * 3.5) + 3;
-        }
-
-        // Cap at reasonable limits
-        if (mins < 1) mins = 1;
-        if (mins > 60) {
-            setEta('> 1 hr');
-        } else {
-            setEta(`${mins} min`);
-        }
     }, [booking]);
 
     useEffect(() => {
@@ -253,17 +251,26 @@ export default function TrackingScreen() {
                     }
                     
                     setShowProviderFound(true);
+                    // ⏲️ Auto-dismiss after 8s to show map automatically
+                    setTimeout(() => setShowProviderFound(false), 8000);
                 }
 
                 if (['en_route', 'arrived', 'in_progress', 'completed'].includes(payload.new.status)) {
                     setShowProviderFound(false);
-                    if (payload.new.status === 'completed') {
+                    
+                    // 📳 Production-level Haptics
+                    if (payload.new.status === 'arrived') {
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                    } else if (payload.new.status === 'in_progress') {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    } else if (payload.new.status === 'completed') {
                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                     }
                 }
 
                 // 2. Full refresh of joins (profiles, ratings) in background
-                setTimeout(() => loadBooking(false, true), 400);
+                // We use a slight delay to allow the backend to finish billing calculations
+                setTimeout(() => loadBooking(false, true), 600);
             })
             .subscribe();
 
@@ -289,7 +296,24 @@ export default function TrackingScreen() {
             supabase.removeChannel(offerChannel);
             subscription.remove();
         };
-    }, [id, loadBooking]);
+    }, [id, loadBooking, offers]);
+
+    // 🗺️ Zoom map when overlay is dismissed
+    useEffect(() => {
+        if (!showProviderFound && !['requested', 'searching'].includes(booking?.status)) {
+            if (providerLocation && booking?.customer_latitude) {
+                setTimeout(() => {
+                    mapRef.current?.fitToCoordinates([
+                        { latitude: booking.customer_latitude, longitude: booking.customer_longitude },
+                        providerLocation
+                    ], {
+                        edgePadding: { top: 140, right: 50, bottom: 300, left: 50 },
+                        animated: true,
+                    });
+                }, 500);
+            }
+        }
+    }, [showProviderFound, providerLocation, booking?.customer_latitude]);
 
     useEffect(() => {
         if (!id) return;
@@ -419,7 +443,7 @@ export default function TrackingScreen() {
                         </TouchableOpacity>
                     </SafeAreaView>
                     <View style={styles.searchingFooter}>
-                        <Text style={styles.searchingNote}>Stay on this page. We're connecting with service partners near your location.</Text>
+                        <Text style={styles.searchingNote}>Stay on this page. We&apos;re connecting with service partners near your location.</Text>
                         <TouchableOpacity style={styles.closeSearching} onPress={() => handleCancelJob('Cancelled by user during search')}>
                             <Text style={styles.closeSearchingText}>Stop Searching</Text>
                         </TouchableOpacity>
@@ -487,7 +511,12 @@ export default function TrackingScreen() {
 
                     {showProviderFound && (
                         <View style={StyleSheet.absoluteFill}>
-                            <ProviderFoundScreen providerName={providerName} serviceName={booking.service_name_snapshot || 'Service'} rating={booking?.provider_details?.avg_rating} />
+                            <ProviderFoundScreen 
+                                providerName={providerName} 
+                                serviceName={booking.service_name_snapshot || 'Service'} 
+                                rating={booking?.provider_details?.avg_rating} 
+                                onDismiss={() => setShowProviderFound(false)}
+                            />
                             <SafeAreaView style={styles.headerOverlay} edges={['top']} pointerEvents="box-none">
                                 <TouchableOpacity style={styles.backBtn} onPress={() => router.replace('/(tabs)/bookings')}><ArrowLeft size={20} color="#111827" /></TouchableOpacity>
                             </SafeAreaView>
@@ -499,7 +528,13 @@ export default function TrackingScreen() {
                             <SafeAreaView style={styles.headerOverlay} edges={['top']} pointerEvents="box-none">
                                 <View style={styles.headerTop}>
                                     <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}><ArrowLeft size={20} color="#111827" /></TouchableOpacity>
-                                    <View style={styles.headerStatus}><Text style={styles.headerStatusTitle}>{statusMeta.title}</Text><Text style={styles.headerStatusSub}>{statusMeta.sub}</Text></View>
+                                    <View style={styles.headerStatus}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                            <Animated.View style={[styles.statusPulse, { backgroundColor: statusMeta.color, opacity: pulseAnim }]} />
+                                            <Text style={styles.headerStatusTitle}>{statusMeta.title}</Text>
+                                        </View>
+                                        <Text style={styles.headerStatusSub}>{statusMeta.sub}</Text>
+                                    </View>
                                 </View>
                             </SafeAreaView>
 
@@ -557,9 +592,10 @@ const styles = StyleSheet.create({
     loaderText: { fontSize: 14, color: '#9CA3AF' },
     headerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 16, paddingVertical: 10, zIndex: 100 },
     headerTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    headerStatus: { backgroundColor: 'rgba(255, 255, 255, 0.9)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#E5E7EB' },
+    headerStatus: { backgroundColor: 'rgba(255, 255, 255, 0.9)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 24, borderWidth: 1, borderColor: '#E5E7EB', minWidth: 140 },
     headerStatusTitle: { fontSize: 13, fontWeight: '800', color: '#111827' },
-    headerStatusSub: { fontSize: 11, color: '#6B7280' },
+    headerStatusSub: { fontSize: 11, color: '#6B7280', fontWeight: '500' },
+    statusPulse: { width: 8, height: 8, borderRadius: 4 },
     backBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
     providerMarker: { width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(26, 63, 255, 0.2)', alignItems: 'center', justifyContent: 'center' },
     providerMarkerDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: PRIMARY, borderWidth: 2, borderColor: '#FFF' },

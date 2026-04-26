@@ -5,7 +5,7 @@
     "slug": "customer-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/Gemini_Generated_Image_l8vitul8vitul8vi.png",
     "scheme": "customerapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -22,7 +22,7 @@
       "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#1A3FFF",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "foregroundImage": "./assets/images/Gemini_Generated_Image_l8vitul8vitul8vi.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
@@ -51,7 +51,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/icon.png",
+          "icon": "./assets/images/Gemini_Generated_Image_l8vitul8vitul8vi.png",
           "color": "#1A3FFF",
           "androidMode": "default"
         }
@@ -59,7 +59,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/Gemini_Generated_Image_l8vitul8vitul8vi.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",

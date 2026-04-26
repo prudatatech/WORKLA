@@ -1,4 +1,3 @@
-import * as Location from 'expo-location';
 import { useRouter, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -185,7 +184,7 @@ export default function HomeScreen() {
               .order('completed_at', { ascending: false }).limit(1).maybeSingle(),
             supabase.from('bookings').select('id, service_name_snapshot, completed_at, scheduled_date')
               .eq('customer_id', userId).eq('status', 'completed').order('completed_at', { ascending: false }).limit(3),
-            supabase.from('bookings').select('id, status, service_name_snapshot, booking_number, batch_id')
+            supabase.from('bookings').select('id, status, service_name_snapshot, booking_number, batch_id, provider_id, provider_details(business_name, avg_rating, profiles(full_name))')
               .eq('customer_id', userId).in('status', ['requested', 'searching', 'confirmed', 'en_route', 'arrived', 'in_progress'])
               .order('created_at', { ascending: false }).limit(3),
             api.get('/api/v1/drafts').catch(() => ({ data: [] } as any)),
@@ -193,7 +192,7 @@ export default function HomeScreen() {
           ]);
 
           
-          const [meRes, unratedRes, recentRes, activeRes, draftRes, addressRes] = results as any[];
+          const [meRes, unratedRes, recentRes, activeRes, draftRes] = results as any[];
 
           if (meRes.data?.data) {
             const p = meRes.data.data;
@@ -246,7 +245,7 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
     }
-  }, [bannerSlide, setRawLocationName, autoDetectAddress]);
+  }, [bannerSlide, setRawLocationName]);
 
   // Sync refs on each render so they always call the latest version
   loadDataRef.current = loadData;
@@ -276,15 +275,17 @@ export default function HomeScreen() {
           // Only process events when app is in foreground
           if (appStateRef.current !== 'active') return;
           
-          console.log('[Real-time 📢] Active booking update:', payload.eventType);
+          console.log('[Real-time 📢] Active booking update:', payload.eventType, (payload.new as any)?.status);
           
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             const booking = payload.new as any;
             const activeStatuses = ['requested', 'searching', 'confirmed', 'en_route', 'arrived', 'in_progress'];
             
             if (activeStatuses.includes(booking.status)) {
+              // Re-fetch with joined provider data to ensure name reflects correctly
               const { data: active } = await supabase
-                .from('bookings').select('id, status, service_name_snapshot, booking_number, batch_id')
+                .from('bookings')
+                .select('id, status, service_name_snapshot, booking_number, batch_id, provider_id, provider_details(business_name, avg_rating, profiles(full_name))')
                 .eq('customer_id', session.user.id)
                 .in('status', activeStatuses)
                 .order('created_at', { ascending: false })
@@ -295,14 +296,25 @@ export default function HomeScreen() {
                 Animated.spring(bannerSlide, { toValue: 0, useNativeDriver: true, speed: 10 }).start();
               }
             } else if (booking.status === 'completed' || booking.status === 'cancelled') {
-              setActiveBookings(prev => prev.filter(b => b.id !== booking.id));
-              if (activeBookings.length <= 1) {
-                Animated.timing(bannerSlide, { toValue: 150, useNativeDriver: true, duration: 200 }).start();
-              }
+              setActiveBookings(prev => {
+                const filtered = prev.filter(b => b.id !== booking.id);
+                if (filtered.length === 0) {
+                  Animated.timing(bannerSlide, { toValue: 150, useNativeDriver: true, duration: 200 }).start();
+                }
+                return filtered;
+              });
               if (booking.status === 'completed') {
                 loadData(); 
               }
             }
+          } else if (payload.eventType === 'DELETE') {
+             setActiveBookings(prev => {
+               const filtered = prev.filter(b => b.id !== payload.old.id);
+               if (filtered.length === 0) {
+                 Animated.timing(bannerSlide, { toValue: 150, useNativeDriver: true, duration: 200 }).start();
+               }
+               return filtered;
+             });
           }
         }
       )
@@ -395,6 +407,8 @@ export default function HomeScreen() {
     hasMountedRef.current = true;
 
     loadDataRef.current();
+    subscribeRef.current();
+
     startPulseRef.current();
     subscribeRef.current();
 
@@ -429,7 +443,7 @@ export default function HomeScreen() {
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={PRIMARY} colors={[PRIMARY]} />}
       >
-        <RatingPrompt unratedBooking={unratedBooking} onDismiss={() => setUnratedBooking(null)} />
+        <RatingPrompt booking={unratedBooking} onClose={() => setUnratedBooking(null)} />
         <OffersCarousel banners={banners} loading={loading} />
         
         {/* Continue Booking Draft Card */}
@@ -499,6 +513,14 @@ export default function HomeScreen() {
 
         <View style={{ height: 110 }} />
       </ScrollView>
+
+      {/* Success/Rating Modal */}
+      {unratedBooking && (
+        <RatingPrompt
+          booking={unratedBooking}
+          onClose={() => setUnratedBooking(null)}
+        />
+      )}
     </View>
   );
 }

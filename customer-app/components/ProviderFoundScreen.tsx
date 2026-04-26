@@ -10,22 +10,24 @@ import {
   StyleSheet,
   Text,
   View,
+  TouchableOpacity,
 } from 'react-native';
 import { Check, Navigation2, Star } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
-const PRIMARY = '#1A3FFF';
 
 interface ProviderFoundScreenProps {
   providerName: string;
   serviceName: string;
   rating?: number;
+  onDismiss?: () => void;
 }
 
 export default function ProviderFoundScreen({
   providerName,
   serviceName,
   rating,
+  onDismiss,
 }: ProviderFoundScreenProps) {
   const checkScale = useRef(new Animated.Value(0)).current;
   const checkOpacity = useRef(new Animated.Value(0)).current;
@@ -75,7 +77,7 @@ export default function ProviderFoundScreen({
         Animated.timing(nameSlide, { toValue: 0, duration: 400, useNativeDriver: true }),
       ]).start();
     }, 500);
-  }, []);
+  }, [avatarScale, ringScale1, ringOpacity1, checkScale, checkOpacity, nameOpacity, nameSlide]);
 
   return (
     <View style={styles.container}>
@@ -147,13 +149,19 @@ export default function ProviderFoundScreen({
           </View>
         )}
 
-        {/* Status strip */}
         <View style={styles.statusStrip}>
           <Navigation2 size={14} color="#60A5FA" />
           <Text style={styles.statusStripText}>
             Getting ready to head your way...
           </Text>
         </View>
+
+        {onDismiss && (
+          <TouchableOpacity style={styles.trackButton} onPress={onDismiss} activeOpacity={0.8}>
+            <Text style={styles.trackButtonText}>Track Live</Text>
+            <Check size={16} color="#FFF" />
+          </TouchableOpacity>
+        )}
       </Animated.View>
     </View>
   );
@@ -302,5 +310,26 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#93C5FD',
     fontWeight: '600',
+  },
+  trackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#10B981',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 18,
+    marginTop: 32,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  trackButtonText: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#FFF',
+    letterSpacing: 0.5,
   },
 });

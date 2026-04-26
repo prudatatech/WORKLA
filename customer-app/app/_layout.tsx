@@ -3,7 +3,8 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, AppStateStatus, Platform } from 'react-native';
+import { Animated, AppState, AppStateStatus, Dimensions, Image, Platform, StyleSheet, View } from 'react-native';
+import { Svg, Defs, RadialGradient, Stop, Rect } from 'react-native-svg';
 import NetworkBanner from '../components/NetworkBanner';
 import InAppToast from '../components/InAppToast';
 import LoadingScreen from '../components/LoadingScreen';
@@ -36,6 +37,12 @@ SplashScreen.preventAutoHideAsync();
  * 5. 🛡️ AppState-aware lifecycle — pauses realtime/socket in background
  *    to prevent Android OOM kills (like Zomato/Uber pattern).
  */
+
+const { width } = Dimensions.get('window');
+let hasShownAppSplash = false;
+
+const AnimatedRect = Animated.createAnimatedComponent(Rect);
+
 export default function RootLayout() {
   const [session, setSession] = useState<any>(null);
   const [initialized, setInitialized] = useState(false);
@@ -45,10 +52,18 @@ export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
   const notifResponseRef = useRef<any>(null);
-  
+
   // 🛡️ Track app state and realtime channel reference
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const channelRef = useRef<any>(null);
+
+  // 🎬 Animated Splash State
+  const splashOpacity = useRef(new Animated.Value(1)).current;
+  const splashScale = useRef(new Animated.Value(0.9)).current;
+  const splashRotateY = useRef(new Animated.Value(0)).current;
+  const splashShimmer = useRef(new Animated.Value(-1)).current;
+  const splashSpotlight = useRef(new Animated.Value(0.65)).current;
+  const [showAppSplash, setShowAppSplash] = useState(!hasShownAppSplash);
 
   // 🔔 Setup push notifications on mount
   useEffect(() => {
@@ -173,7 +188,7 @@ export default function RootLayout() {
 
     const sub = AppState.addEventListener('change', handleAppStateChange);
     return () => sub.remove();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Socket.io real-time alerts — uses the AppState-aware socketService
@@ -230,7 +245,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (!session?.user?.id) return;
-    
+
     subscribeToNotifications(session.user.id);
 
     return () => {
@@ -247,6 +262,53 @@ export default function RootLayout() {
 
   const handleToastDismiss = useCallback(() => {
     setToast(prev => ({ ...prev, visible: false }));
+  }, []);
+
+  // 🎬 Premium Splash Sequence
+  useEffect(() => {
+    if (hasShownAppSplash) {
+      setShowAppSplash(false);
+      return;
+    }
+
+    // Dramatic entrance + Shimmer sequence
+    Animated.sequence([
+      Animated.delay(400),
+      Animated.parallel([
+        Animated.spring(splashScale, { toValue: 1, friction: 5, tension: 40, useNativeDriver: true }),
+        Animated.timing(splashOpacity, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(splashRotateY, { toValue: 1, duration: 1200, useNativeDriver: true }),
+      ]),
+    ]).start(() => {
+      // 🛡️ Safety: Small delay to ensure native view is attached
+      setTimeout(() => {
+        // Start Breathing/Spotlight loop once entered
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(splashSpotlight, { toValue: 1, duration: 2500, useNativeDriver: true }),
+            Animated.timing(splashSpotlight, { toValue: 0, duration: 2500, useNativeDriver: true }),
+          ])
+        ).start();
+
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(splashShimmer, { toValue: 1, duration: 1800, useNativeDriver: true }),
+            Animated.delay(1200),
+          ])
+        ).start();
+      }, 100);
+
+      // Schedule the final exit
+      setTimeout(() => {
+        Animated.parallel([
+          Animated.timing(splashOpacity, { toValue: 0, duration: 500, useNativeDriver: true }),
+          Animated.timing(splashScale, { toValue: 1.2, duration: 700, useNativeDriver: true }),
+        ]).start(() => {
+          setShowAppSplash(false);
+          hasShownAppSplash = true;
+        });
+      }, 1800);
+    });
   }, []);
 
   if (!initialized) {
@@ -285,6 +347,85 @@ export default function RootLayout() {
         type={toast.type}
         onDismiss={handleToastDismiss}
       />
+
+      {/* 🎬 Premium Animated Splash Overlay */}
+      {showAppSplash && (
+        <Animated.View style={[styles.splashOverlay, { opacity: splashOpacity }]}>
+          <Svg height="100%" width="100%" style={StyleSheet.absoluteFill}>
+            <Defs>
+              <RadialGradient
+                id="grad1"
+                cx="50%"
+                cy="50%"
+                rx="65%"
+                ry="65%"
+                fx="50%"
+                fy="50%"
+              >
+                <Stop offset="0" stopColor="#FFFFFF" stopOpacity="1" />
+                <Stop offset="0.6" stopColor="#F9F9FB" stopOpacity="1" />
+                <Stop offset="1" stopColor="#E8E8ED" stopOpacity="1" />
+              </RadialGradient>
+
+              <RadialGradient
+                id="grad2"
+                cx="50%"
+                cy="50%"
+                rx="85%"
+                ry="85%"
+                fx="50%"
+                fy="50%"
+              >
+                <Stop offset="0" stopColor="#FFFFFF" stopOpacity="1" />
+                <Stop offset="0.75" stopColor="#F9F9FB" stopOpacity="1" />
+                <Stop offset="1" stopColor="#E8E8ED" stopOpacity="1" />
+              </RadialGradient>
+            </Defs>
+            <Rect x="0" y="0" width="100%" height="100%" fill="url(#grad1)" />
+            <AnimatedRect x="0" y="0" width="100%" height="100%" fill="url(#grad2)" opacity={splashSpotlight as any} />
+          </Svg>
+
+          <Animated.View style={{
+            transform: [
+              { scale: splashScale },
+              { rotateY: splashRotateY.interpolate({ inputRange: [0, 1], outputRange: ['90deg', '0deg'] }) },
+            ],
+            alignItems: 'center'
+          }}>
+            <Image
+              source={require('../assets/images/Gemini_Generated_Image_l8vitul8vitul8vi.png')}
+              style={styles.splashLogo}
+              resizeMode="contain"
+            />
+
+            {/* Shimmer Sweep Layer */}
+            <Animated.View style={[styles.shimmerOverlay, {
+              transform: [{ translateX: splashShimmer.interpolate({ inputRange: [-1, 1], outputRange: [-200, 200] }) }]
+            }]} />
+          </Animated.View>
+        </Animated.View>
+      )}
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  splashOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#FFFFFF',
+    zIndex: 99999,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  splashLogo: {
+    width: width * 0.8,
+    height: (width * 0.8) * 0.4,
+  },
+  shimmerOverlay: {
+    position: 'absolute',
+    top: 0, bottom: 0,
+    width: 60,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    transform: [{ rotate: '25deg' }],
+  },
+});

@@ -1,6 +1,6 @@
 import NetInfo from '@react-native-community/netinfo';
 import { WifiOff, RefreshCw } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResilienceStore } from '../lib/resilienceStore';
@@ -13,6 +13,24 @@ export default function NetworkBanner() {
     const slideAnim = useState(new Animated.Value(-100))[0];
     const rotateAnim = useState(new Animated.Value(0))[0];
 
+    const showBanner = useCallback(() => {
+        setVisible(true);
+        Animated.spring(slideAnim, {
+            toValue: insets.top,
+            useNativeDriver: true,
+            tension: 40,
+            friction: 7,
+        }).start();
+    }, [insets.top, slideAnim]);
+
+    const hideBanner = useCallback(() => {
+        Animated.timing(slideAnim, {
+            toValue: -100,
+            duration: 300,
+            useNativeDriver: true,
+        }).start(() => setVisible(false));
+    }, [slideAnim]);
+
     useEffect(() => {
         const unsubscribe = NetInfo.addEventListener(state => {
             setIsConnected(state.isConnected);
@@ -24,7 +42,7 @@ export default function NetworkBanner() {
         });
 
         return () => unsubscribe();
-    }, [visible, isRecovering]);
+    }, [visible, isRecovering, hideBanner, showBanner]);
 
     useEffect(() => {
         if (isRecovering) {
@@ -41,25 +59,7 @@ export default function NetworkBanner() {
         } else if (isConnected !== false && visible) {
             hideBanner();
         }
-    }, [isRecovering, isConnected]);
-
-    const showBanner = () => {
-        setVisible(true);
-        Animated.spring(slideAnim, {
-            toValue: insets.top,
-            useNativeDriver: true,
-            tension: 40,
-            friction: 7,
-        }).start();
-    };
-
-    const hideBanner = () => {
-        Animated.timing(slideAnim, {
-            toValue: -100,
-            duration: 300,
-            useNativeDriver: true,
-        }).start(() => setVisible(false));
-    };
+    }, [isRecovering, isConnected, hideBanner, rotateAnim, showBanner, visible]);
 
     if (!visible && isConnected !== false && !isRecovering) return null;
 
