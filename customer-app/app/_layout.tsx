@@ -9,9 +9,9 @@ import {
 } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, withSequence,
-  withRepeat, withDelay, withSpring, runOnJS, Easing,
-  ReduceMotion, cancelAnimation
+  withRepeat, withDelay, runOnJS, Easing, ReduceMotion
 } from 'react-native-reanimated';
+import { Svg, Defs, RadialGradient, Stop, Rect } from 'react-native-svg';
 import NetworkBanner from '../components/NetworkBanner';
 import InAppToast from '../components/InAppToast';
 import LoadingScreen from '../components/LoadingScreen';
@@ -34,8 +34,37 @@ const getNotifications = () => {
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
 
-const { width } = Dimensions.get('window');
+/**
+ * Root Layout for Customer App
+ * Features:
+ * 1. Session management with auto-redirect for logged-in users.
+ * 2. Supabase Realtime notification listener (replaces Expo Push).
+ * 3. Socket.io real-time alerts with in-app toast.
+ * 4. Network status monitoring.
+ * 5. 🛡️ AppState-aware lifecycle — pauses realtime/socket in background
+ *    to prevent Android OOM kills (like Zomato/Uber pattern).
+ */
+
+const { width, height } = Dimensions.get('window');
 let hasShownAppSplash = false;
+
+// 🎨 Static gradient component (no animation overhead)
+const StaticGradient = React.memo(() => (
+  <Svg height="100%" width="100%" style={StyleSheet.absoluteFill}>
+    <Defs>
+      <RadialGradient
+        id="splashGradient"
+        cx="50%" cy="50%" rx="75%" ry="75%" fx="50%" fy="50%"
+        gradientUnits="objectBoundingBox"
+      >
+        <Stop offset="0" stopColor="#FFFFFF" stopOpacity="1" />
+        <Stop offset="0.5" stopColor="#FAFAFC" stopOpacity="1" />
+        <Stop offset="1" stopColor="#F0F0F5" stopOpacity="1" />
+      </RadialGradient>
+    </Defs>
+    <Rect x="0" y="0" width="100%" height="100%" fill="url(#splashGradient)" />
+  </Svg>
+));
 
 export default function RootLayout() {
   const [session, setSession] = useState<any>(null);
@@ -50,23 +79,28 @@ export default function RootLayout() {
   const segments = useSegments();
   const notifResponseRef = useRef<any>(null);
 
+  // 🛡️ Track app state and realtime channel reference
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const channelRef = useRef<any>(null);
 
-  // 🎬 Clean animation values
-  const logoScale = useSharedValue(0.9);
-  const logoOpacity = useSharedValue(0);
-  const logoTranslateY = useSharedValue(20);
-  const overlayOpacity = useSharedValue(1);
+  // 🎬 Reanimated Shared Values for Super Smooth Splash
+  const splashOpacity = useSharedValue(0);
+  const splashScale = useSharedValue(0.8);
+  const splashRotateY = useSharedValue(0); // Start at 0 to avoid initial jump
+  const splashShimmer = useSharedValue(-100);
+  const mainSplashOpacity = useSharedValue(1);
   const [showAppSplash, setShowAppSplash] = useState(!hasShownAppSplash);
+
+  // 🚀 Performance: Use a ref to track if animation has started
   const animationStartedRef = useRef(false);
 
-  // 🔔 Setup push notifications
+  // 🔔 Setup push notifications on mount
   useEffect(() => {
     const Notifs = getNotifications();
-    if (!Notifs) return;
+    if (!Notifs) return; // Expo Go on Android — skip silently
 
     (async () => {
+      // 1. Set notification handler
       Notifs.setNotificationHandler({
         handleNotification: async () => ({
           shouldShowAlert: true,
@@ -75,6 +109,7 @@ export default function RootLayout() {
         }),
       });
 
+      // 2. Setup Android notification channel
       if (Platform.OS === 'android') {
         await Notifs.setNotificationChannelAsync('booking-updates', {
           name: 'Booking Updates',
@@ -86,6 +121,7 @@ export default function RootLayout() {
         });
       }
 
+      // 3. Request permissions
       const { status: existing } = await Notifs.getPermissionsAsync();
       let finalStatus = existing;
       if (existing !== 'granted') {
@@ -95,6 +131,7 @@ export default function RootLayout() {
 
       if (finalStatus !== 'granted') return;
 
+      // 4. Register push token with backend
       try {
         const token = (await Notifs.getExpoPushTokenAsync({
           projectId: Constants.expoConfig?.extra?.eas?.projectId,
@@ -108,6 +145,7 @@ export default function RootLayout() {
       }
     })();
 
+    // 5. Tap listener: navigate to booking when notification is tapped
     notifResponseRef.current = Notifs.addNotificationResponseReceivedListener((response: any) => {
       const data = response?.notification?.request?.content?.data;
       if (data?.bookingId) {
@@ -140,6 +178,8 @@ export default function RootLayout() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Auto-redirect: if user has a valid session and is on the landing/auth screens,
+  // send them straight to the home tabs.
   useEffect(() => {
     if (!initialized) return;
 
@@ -154,18 +194,21 @@ export default function RootLayout() {
     }
   }, [session, initialized, segments, router]);
 
+  // 🛡️ AppState lifecycle: pause/resume realtime when app backgrounds/foregrounds
   useEffect(() => {
     const handleAppStateChange = (nextState: AppStateStatus) => {
       const prevState = appStateRef.current;
       appStateRef.current = nextState;
 
       if (prevState.match(/active/) && nextState.match(/inactive|background/)) {
+        // === GOING TO BACKGROUND ===
         console.log('[Lifecycle] App backgrounded — pausing realtime channels');
         if (channelRef.current) {
           supabase.removeChannel(channelRef.current);
           channelRef.current = null;
         }
       } else if (prevState.match(/inactive|background/) && nextState === 'active') {
+        // === RETURNING TO FOREGROUND ===
         console.log('[Lifecycle] App foregrounded — resuming realtime channels');
         if (session?.user?.id) {
           subscribeToNotifications(session.user.id);
@@ -175,8 +218,10 @@ export default function RootLayout() {
 
     const sub = AppState.addEventListener('change', handleAppStateChange);
     return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Socket.io real-time alerts — uses the AppState-aware socketService
   useEffect(() => {
     if (!session) {
       socketService.disconnect();
@@ -201,6 +246,7 @@ export default function RootLayout() {
     };
   }, [session]);
 
+  // Supabase Realtime: listen for new rows in `notifications` table
   const subscribeToNotifications = useCallback((userId: string) => {
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
@@ -251,77 +297,84 @@ export default function RootLayout() {
     hasShownAppSplash = true;
   }, []);
 
-  // 🎬 Clean, minimal animation - Like top companies
+  // 🎬 OPTIMIZED Premium Splash Sequence - 60 FPS
   useEffect(() => {
     if (!showAppSplash || animationStartedRef.current) return;
     animationStartedRef.current = true;
 
+    // 🚀 Defer animation to after initial render for smooth start
     const runAnimation = () => {
       'worklet';
 
-      // ✨ Simple entrance: Scale up + Fade in
-      logoOpacity.value = withTiming(1, {
-        duration: 500,
-        easing: Easing.out(Easing.cubic),
-      });
+      // Configure global animation defaults for consistency
+      const timingConfig = {
+        duration: 400,
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1).factory(),
+        reduceMotion: ReduceMotion.Never,
+      };
 
-      logoScale.value = withSpring(1, {
-        damping: 12,
-        stiffness: 100,
-        mass: 0.8,
-      });
+      // 🎯 Phase 1: Entrance - All animations in parallel
+      splashOpacity.value = withTiming(1, { ...timingConfig, duration: 350 });
+      splashScale.value = withTiming(1, { ...timingConfig, duration: 500 });
+      splashRotateY.value = withTiming(0, { ...timingConfig, duration: 600 });
 
-      logoTranslateY.value = withSpring(0, {
-        damping: 15,
-        stiffness: 120,
-      });
+      // 🌊 Phase 2: Continuous shimmer (GPU-optimized)
+      splashShimmer.value = withRepeat(
+        withSequence(
+          withTiming(200, { duration: 1000, easing: Easing.linear }),
+          withTiming(-100, { duration: 0 })
+        ),
+        -1,
+        false
+      );
 
-      // 🎭 Smooth exit after 1.8 seconds
+      // 🎭 Phase 3: Exit - After 2 seconds
       setTimeout(() => {
-        overlayOpacity.value = withTiming(0, {
-          duration: 350,
+        mainSplashOpacity.value = withTiming(0, {
+          duration: 300,
           easing: Easing.out(Easing.cubic),
         }, () => {
           runOnJS(handleSplashComplete)();
         });
 
-        logoScale.value = withTiming(0.95, {
-          duration: 350,
-          easing: Easing.in(Easing.cubic),
+        splashScale.value = withTiming(1.2, {
+          duration: 400,
+          easing: Easing.out(Easing.cubic),
         });
-
-        logoOpacity.value = withTiming(0, {
-          duration: 300,
-        });
-      }, 1800);
+      }, 2000);
     };
 
+    // Use InteractionManager for buttery smooth start
     InteractionManager.runAfterInteractions(runAnimation);
-
-    return () => {
-      cancelAnimation(logoScale);
-      cancelAnimation(logoOpacity);
-      cancelAnimation(logoTranslateY);
-      cancelAnimation(overlayOpacity);
-    };
   }, [showAppSplash]);
 
-  // 🎨 Clean animated styles
+  // 🎨 Animated Styles - Optimized with worklets
   const animatedLogoStyle = useAnimatedStyle(() => {
     'worklet';
     return {
       transform: [
-        { translateY: logoTranslateY.value },
-        { scale: logoScale.value },
+        { perspective: 1000 },
+        { scale: splashScale.value },
+        { rotateY: `${splashRotateY.value}deg` },
       ],
-      opacity: logoOpacity.value,
+      opacity: splashOpacity.value,
+    };
+  });
+
+  const animatedShimmerStyle = useAnimatedStyle(() => {
+    'worklet';
+    return {
+      transform: [
+        { translateX: splashShimmer.value },
+        { rotate: '25deg' },
+      ],
     };
   });
 
   const animatedOverlayStyle = useAnimatedStyle(() => {
     'worklet';
     return {
-      opacity: overlayOpacity.value,
+      opacity: mainSplashOpacity.value,
     };
   });
 
@@ -362,18 +415,29 @@ export default function RootLayout() {
         onDismiss={handleToastDismiss}
       />
 
-      {/* 🎬 Clean Minimal Splash Overlay */}
+      {/* 🎬 OPTIMIZED Super Smooth Reanimated Splash Overlay */}
       {showAppSplash && (
         <Animated.View
           style={[styles.splashOverlay, animatedOverlayStyle]}
+          needsOffscreenAlphaCompositing
           renderToHardwareTextureAndroid
         >
+          {/* Static gradient background for performance */}
+          <StaticGradient />
+
           <Animated.View style={[styles.logoContainer, animatedLogoStyle]}>
             <Image
               source={require('../assets/images/Gemini_Generated_Image_l8vitul8vitul8vi.png')}
               style={styles.splashLogo}
               resizeMode="contain"
               fadeDuration={0}
+            />
+
+            {/* 🌊 Shimmer Sweep Layer - Optimized for GPU */}
+            <Animated.View
+              style={[styles.shimmerOverlay, animatedShimmerStyle]}
+              needsOffscreenAlphaCompositing
+              renderToHardwareTextureAndroid
             />
           </Animated.View>
         </Animated.View>
@@ -393,11 +457,21 @@ const styles = StyleSheet.create({
   logoContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+    borderRadius: 8,
   },
   splashLogo: {
-    width: width * 0.65,
-    height: (width * 0.65) * 0.4,
-    maxWidth: 300,
-    maxHeight: 120,
+    width: width * 0.75,
+    height: (width * 0.75) * 0.4,
+    maxWidth: 350,
+    maxHeight: 140,
+  },
+  shimmerOverlay: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 60,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    opacity: 0.7,
   },
 });

@@ -767,7 +767,11 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
             return reply.send({ success: true, invoiceUrl: signed.signedUrl, invoiceNumber: invoice.invoice_number, invoiceType: invoice.invoice_type } as any);
         } catch (err: any) {
             console.error(`🚨 [Booking] Invoice route error:`, err);
-            return reply.code(500).send({ error: 'INTERNAL_SERVER_ERROR' } as any);
+            return reply.code(500).send({ 
+                error: 'INTERNAL_SERVER_ERROR', 
+                details: err.message,
+                stack: process.env.NODE_ENV === 'development' ? err.stack : undefined 
+            } as any);
         }
     });
 

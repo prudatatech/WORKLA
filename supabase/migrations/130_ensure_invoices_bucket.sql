@@ -1,4 +1,27 @@
--- Ensure the 'invoices' storage bucket exists
+-- 0. Ensure the 'invoices' table exists first (Fallback for missing migrations)
+CREATE TABLE IF NOT EXISTS public.invoices (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    booking_id      UUID NOT NULL UNIQUE,
+    scheduled_date  DATE NOT NULL,
+    invoice_number  VARCHAR(50) UNIQUE NOT NULL,
+    customer_id     UUID NOT NULL REFERENCES public.profiles(id),
+    provider_id     UUID REFERENCES public.profiles(id),
+    total_amount    DECIMAL(12,2) NOT NULL,
+    tax_amount      DECIMAL(12,2) NOT NULL,
+    cgst_amount     DECIMAL(12,2) NOT NULL,
+    sgst_amount     DECIMAL(12,2) NOT NULL,
+    platform_fee    DECIMAL(12,2) NOT NULL DEFAULT 0,
+    invoice_type    VARCHAR(20) DEFAULT 'INVOICE',
+    status          VARCHAR(20) NOT NULL DEFAULT 'generated',
+    storage_path    TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Ensure RLS is enabled on the table
+ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
+
+-- 1. Ensure the 'invoices' storage bucket exists
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('invoices', 'invoices', false)
 ON CONFLICT (id) DO NOTHING;

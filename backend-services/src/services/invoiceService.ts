@@ -118,8 +118,9 @@ export class InvoiceService {
             doc.fillColor('#4B5563').fontSize(10).text('Premium On-Demand Services', 50, 80);
             
             doc.font('Helvetica-Bold').fillColor('#111827').fontSize(18).text(isCreditNote ? 'CREDIT NOTE' : 'TAX INVOICE', 400, 50, { align: 'right' }).font('Helvetica');
+            const dateStr = data.created_at ? new Date(data.created_at).toLocaleDateString('en-IN') : new Date().toLocaleDateString('en-IN');
             doc.fontSize(10).text(`${isCreditNote ? 'CN' : 'Inv'} #: ${data.invoice_number}`, 400, 75, { align: 'right' });
-            doc.text(`Date: ${new Date(data.created_at).toLocaleDateString('en-IN')}`, 400, 90, { align: 'right' });
+            doc.text(`Date: ${dateStr}`, 400, 90, { align: 'right' });
 
             doc.moveTo(50, 110).lineTo(550, 110).stroke('#E5E7EB');
 
