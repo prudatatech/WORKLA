@@ -2,7 +2,6 @@ import { useRouter } from 'expo-router';
 import {
     ArrowLeft,
     Bell,
-    BellOff,
     Check,
     CreditCard,
     Package,

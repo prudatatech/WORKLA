@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, ArrowUpRight, Plus, RefreshCw, Wallet } from 'lucide-react-native';
+import { ArrowLeft, ArrowUpRight, Plus } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,

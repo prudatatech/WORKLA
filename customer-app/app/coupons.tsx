@@ -38,7 +38,6 @@ const COUPON_COLORS = ['#7C3AED', '#0369A1', '#059669', '#D97706', '#DC2626'];
 export default function CouponsScreen() {
     const router = useRouter();
     const [coupons, setCoupons] = useState<Coupon[]>([]);
-    const [usedIds, setUsedIds] = useState<Set<string>>(new Set());
     const [loading, setLoading] = useState(true);
     const [couponCode, setCouponCode] = useState('');
     const [copiedCode, setCopiedCode] = useState('');

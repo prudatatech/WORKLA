@@ -73,7 +73,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [drafts, setDrafts] = useState<any[]>([]);
 
-  const { selectedAddress, rawLocationName, setRawLocationName, autoDetectAddress } = useAddressStore();
+  const { selectedAddress, rawLocationName, setRawLocationName } = useAddressStore();
 
   // ── Animation ──
   const notifPulse = useRef(new Animated.Value(1)).current;
@@ -309,7 +309,7 @@ export default function HomeScreen() {
       .subscribe();
 
     realtimeChannelRef.current = channel;
-  }, [bannerSlide, loadData, activeBookings.length]);
+  }, [bannerSlide, loadData]);
 
   // Sync refs
   subscribeRef.current = subscribeToBookingUpdates;
@@ -398,13 +398,21 @@ export default function HomeScreen() {
     subscribeRef.current();
 
     startPulseRef.current();
-    subscribeRef.current();
+    
+    // Fallback polling for active bookings (every 30s)
+    const interval = setInterval(() => {
+      if (appStateRef.current === 'active') {
+        loadDataRef.current();
+      }
+    }, 30000);
 
     return () => {
       if (pulseAnimRef.current) pulseAnimRef.current.stop();
       if (realtimeChannelRef.current) supabase.removeChannel(realtimeChannelRef.current);
+      clearInterval(interval);
     };
   }, []);
+
 
   const dismissBanner = () => {
     isBannerDismissedThisSession = true;

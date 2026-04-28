@@ -1,8 +1,7 @@
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Clock, CreditCard, Receipt } from 'lucide-react-native';
+import { ArrowLeft, CreditCard, Receipt } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
     FlatList,
     StatusBar,
     StyleSheet,
@@ -12,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import EmptyState from '../components/EmptyState';
-import { EarningRowSkeleton } from '../components/SkeletonLoader';
+import { BookingCardSkeleton } from '../components/SkeletonLoader';
 import { api } from '../lib/api';
 
 const WalletEmptyImg = require('../assets/images/wallet-empty.png');
@@ -114,7 +113,7 @@ export default function PaymentHistoryScreen() {
 
             {loading ? (
                 <View style={{ padding: 16 }}>
-                    {[1, 2, 3, 4, 5, 6, 7].map(i => <EarningRowSkeleton key={i} />)}
+                    {[1, 2, 3, 4, 5, 6, 7].map(i => <BookingCardSkeleton key={i} />)}
                 </View>
             ) : (
                 <FlatList

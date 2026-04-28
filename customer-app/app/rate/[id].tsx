@@ -65,7 +65,7 @@ export default function RatingScreen() {
         }
         setLoading(true);
         try {
-            const { data: { user } } = await supabase.auth.getUser();
+            await supabase.auth.getUser();
             const fullReview = [
                 selectedTags.length > 0 ? selectedTags.join(', ') : null,
                 review.trim() || null,

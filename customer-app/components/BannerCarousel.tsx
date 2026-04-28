@@ -51,7 +51,6 @@ export default function BannerCarousel({ banners }: Props) {
     }, [activeIndex, banners.length]);
 
     const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-        const slideSize = event.nativeEvent.layoutMeasurement.width;
         const index = Math.floor(event.nativeEvent.contentOffset.x / (CARD_WIDTH + SPACING));
         if (index !== activeIndex && index >= 0 && index < banners.length) {
             setActiveIndex(index);

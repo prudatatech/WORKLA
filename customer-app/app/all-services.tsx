@@ -3,7 +3,6 @@ import { ChevronLeft, Search } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     Dimensions,
-    Image,
     ScrollView,
     StyleSheet,
     Text,
@@ -18,38 +17,7 @@ import { getBgForCategory, getColorForCategory, getIconForCategory } from '../li
 
 const { width } = Dimensions.get('window');
 
-function ServiceCategoryImage({ imageUrl, slug, size, borderRadius }: {
-    imageUrl?: string;
-    slug: string;
-    size: number;
-    borderRadius: number;
-}) {
-    const [imgError, setImgError] = useState(false);
-    const IconComponent = getIconForCategory(slug);
-    const bg = getBgForCategory(slug);
-    const color = getColorForCategory(slug);
 
-    if (imageUrl && !imgError) {
-        return (
-            <View style={{ width: size, height: size, borderRadius, overflow: 'hidden' }}>
-                <Image
-                    source={{ uri: imageUrl }}
-                    style={{ width: size, height: size }}
-                    onError={() => setImgError(true)}
-                    resizeMode="cover"
-                />
-            </View>
-        );
-    }
-    return (
-        <View style={{
-            width: size, height: size, borderRadius,
-            backgroundColor: bg, justifyContent: 'center', alignItems: 'center'
-        }}>
-            <IconComponent color={color} size={size * 0.45} />
-        </View>
-    );
-}
 
 export default function AllServicesScreen() {
     const router = useRouter();

@@ -8,7 +8,7 @@ import {
   Search,
   User,
 } from 'lucide-react-native';
-import React, { useRef } from 'react';
+import React from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PRIMARY } from '../../lib/ui-constants';

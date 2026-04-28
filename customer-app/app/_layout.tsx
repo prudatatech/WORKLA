@@ -5,11 +5,11 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AppState, AppStateStatus, Dimensions, Image, InteractionManager,
-  Platform, StyleSheet, View
+  Platform, StyleSheet
 } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, withSequence,
-  withRepeat, withDelay, runOnJS, Easing, ReduceMotion
+  withRepeat, runOnJS, Easing, ReduceMotion
 } from 'react-native-reanimated';
 import { Svg, Defs, RadialGradient, Stop, Rect } from 'react-native-svg';
 import NetworkBanner from '../components/NetworkBanner';
@@ -45,7 +45,7 @@ SplashScreen.preventAutoHideAsync();
  *    to prevent Android OOM kills (like Zomato/Uber pattern).
  */
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 let hasShownAppSplash = false;
 
 // 🎨 Static gradient component (no animation overhead)
@@ -65,6 +65,9 @@ const StaticGradient = React.memo(() => (
     <Rect x="0" y="0" width="100%" height="100%" fill="url(#splashGradient)" />
   </Svg>
 ));
+
+StaticGradient.displayName = 'StaticGradient';
+
 
 export default function RootLayout() {
   const [session, setSession] = useState<any>(null);
@@ -346,7 +349,7 @@ export default function RootLayout() {
 
     // Use InteractionManager for buttery smooth start
     InteractionManager.runAfterInteractions(runAnimation);
-  }, [showAppSplash]);
+  }, [showAppSplash, handleSplashComplete, mainSplashOpacity, splashOpacity, splashRotateY, splashScale, splashShimmer]);
 
   // 🎨 Animated Styles - Optimized with worklets
   const animatedLogoStyle = useAnimatedStyle(() => {

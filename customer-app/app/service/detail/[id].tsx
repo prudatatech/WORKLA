@@ -20,7 +20,7 @@ export default function ServiceDetailScreen() {
 
     const fetchDetail = useCallback(async () => {
         setLoading(true);
-        const { data, error: _error } = await supabase
+        const { data } = await supabase
             .from('service_subcategories')
             .select('*, services(name, image_url)')
             .eq('id', id)

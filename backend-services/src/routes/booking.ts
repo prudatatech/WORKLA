@@ -841,25 +841,145 @@ export default async function bookingRoutes(fastifyInstance: FastifyInstance) {
 
                     if (error) throw error;
 
-                    // Dispatch each independently (non-blocking)
+                    // 🔥 Enterprise Robust Dispatch (Mirroring individual route logic)
                     (async () => {
                         try {
-                            const { data: count, error: dispatchErr } = await supabaseAdmin.rpc('dispatch_job', { p_booking_id: data.id });
+                            let offersCreated = 0;
+                            let offers: any[] = [];
+
+                            // 1. Try RPC Dispatch first
+                            const { data: dispatchCount, error: dispatchError } = await supabaseAdmin
+                                .rpc('dispatch_job', { p_booking_id: data.id });
                             
-                            if (dispatchErr || !count || count === 0) {
-                                // If no providers found or dispatch fails, auto-cancel this specific booking in the batch
-                                await supabaseAdmin.from('bookings').update({ 
-                                    status: 'cancelled', 
-                                    cancellation_reason: 'No workers available in your area for this service at the moment.' 
-                                }).eq('id', data.id);
-                                fastify.log.info({ bookingId: data.id }, '[Batch] Auto-cancelled: No providers found');
+                            if (dispatchError || !dispatchCount || dispatchCount === 0) {
+                                fastify.log.warn({ bookingId: data.id, error: dispatchError?.message }, '[Batch] RPC Dispatch failed or found 0. Falling back to manual search.');
+                                
+                                // FALLBACK: Manual Provider Search
+                                const v_max_radius = 20.0;
+                                const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+
+                                const { data: eligibleProviders } = await supabaseAdmin
+                                    .from('provider_details')
+                                    .select(`
+                                        provider_id,
+                                        is_online,
+                                        verification_status,
+                                        provider_locations!inner(latitude, longitude, recorded_at),
+                                        provider_services!inner(subcategory_id, is_active)
+                                    `)
+                                    .eq('is_online', true)
+                                    .eq('verification_status', 'verified')
+                                    .eq('provider_services.subcategory_id', item.subcategoryId)
+                                    .eq('provider_services.is_active', true)
+                                    .gt('provider_locations.recorded_at', fourHoursAgo);
+
+                                if (eligibleProviders && eligibleProviders.length > 0) {
+                                    const calculateDist = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+                                        const R = 6371;
+                                        const dLat = (lat2 - lat1) * Math.PI / 180;
+                                        const dLon = (lon2 - lon1) * Math.PI / 180;
+                                        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                                            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                                            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+                                        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                                    };
+
+                                    const providersInRange = eligibleProviders
+                                        .map((p: any) => ({
+                                            ...p,
+                                            distance: calculateDist(item.customerLatitude, item.customerLongitude, p.provider_locations.latitude, p.provider_locations.longitude)
+                                        }))
+                                        .filter(p => p.distance < v_max_radius)
+                                        .sort((a, b) => a.distance - b.distance)
+                                        .slice(0, 15);
+
+                                    if (providersInRange.length > 0) {
+                                        const offerInserts = providersInRange.map(p => ({
+                                            booking_id: data.id,
+                                            provider_id: p.provider_id,
+                                            distance_km: p.distance,
+                                            expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+                                            status: 'pending'
+                                        }));
+
+                                        const { data: createdOffers, error: offerErr } = await supabaseAdmin
+                                            .from('job_offers')
+                                            .insert(offerInserts)
+                                            .select('id, provider_id');
+
+                                        if (!offerErr && createdOffers) {
+                                            offersCreated = createdOffers.length;
+                                            offers = createdOffers;
+                                            // Explicitly update to searching
+                                            await supabaseAdmin.from('bookings').update({ status: 'searching' }).eq('id', data.id);
+                                        }
+                                    } else {
+                                        // Auto-cancel if still no providers
+                                        await supabaseAdmin.from('bookings').update({ 
+                                            status: 'cancelled', 
+                                            cancellation_reason: 'No providers found in range (Batch Fallback)' 
+                                        }).eq('id', data.id);
+                                    }
+                                } else {
+                                    // Auto-cancel if no eligible providers
+                                    await supabaseAdmin.from('bookings').update({ 
+                                        status: 'cancelled', 
+                                        cancellation_reason: 'No workers online for this service (Batch Fallback)' 
+                                    }).eq('id', data.id);
+                                }
                             } else {
-                                fastify.log.info({ bookingId: data.id, offers: count }, '[Batch] Dispatched successfully');
-                                // Trigger notification worker (skip dispatch since we already did it)
-                                EventBus.publish('booking.created', { bookingId: data.id, skipDispatch: true }).catch(() => {});
+                                offersCreated = dispatchCount;
+                                // Fetch offers created by RPC
+                                const { data: rpcOffers } = await supabaseAdmin
+                                    .from('job_offers')
+                                    .select('id, provider_id')
+                                    .eq('booking_id', data.id)
+                                    .eq('status', 'pending');
+                                offers = rpcOffers || [];
+                                // Update status to searching to ensure nudge works and it's visible in all systems
+                                await supabaseAdmin.from('bookings').update({ status: 'searching' }).eq('id', data.id);
                             }
+
+                            // 2. Notify Providers
+                            if (offers.length > 0) {
+                                const { emitToUser } = await import('../socket');
+                                for (const offer of offers) {
+                                    const notificationData = {
+                                        type: 'new_job',
+                                        bookingId: data.id,
+                                        offerId: offer.id,
+                                        amount: item.totalAmount,
+                                        serviceName: item.serviceNameSnapshot,
+                                        address: item.customerAddress
+                                    };
+
+                                    try {
+                                        await supabaseAdmin.from('notifications').insert({
+                                            user_id: offer.provider_id,
+                                            title: 'New Service Request! 🚀',
+                                            body: `${item.serviceNameSnapshot || 'New Job'} available now.`,
+                                            type: 'new_job',
+                                            data: notificationData,
+                                            is_read: false
+                                        });
+                                    } catch (notifErr) {
+                                        fastify.log.error({ err: notifErr, providerId: offer.provider_id }, '[Batch] Notification persist failed');
+                                    }
+
+                                    emitToUser(offer.provider_id, 'notification:alert', {
+                                        title: 'New Service Request! 🚀',
+                                        body: `${item.serviceNameSnapshot || 'New Job'} available now.`,
+                                        type: 'new_job',
+                                        data: notificationData
+                                    });
+                                }
+                                fastify.log.info({ bookingId: data.id, offers: offers.length }, '[Batch] Notified providers');
+                            }
+
+                            // 3. Trigger EventBus (skip dispatch as we handled it)
+                            EventBus.publish('booking.created', { bookingId: data.id, skipDispatch: true }, { 'x-request-id': 'batch-dispatch' }).catch(() => {});
                         } catch (e: any) {
-                            fastify.log.error({ err: e.message, bookingId: data.id }, '[Batch] Dispatch failed');
+                            fastify.log.error({ err: e.message, bookingId: data.id }, '[Batch] Dispatch lifecycle failed');
                         }
                     })();
 

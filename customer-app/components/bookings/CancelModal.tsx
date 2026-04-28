@@ -1,6 +1,7 @@
 import { XCircle } from 'lucide-react-native';
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { api } from '../../lib/api';
 
 const REASONS = [
   "Change of plans",
@@ -26,21 +27,20 @@ export default function CancelModal({
   visible, bookingId, cancelReason, customReason, cancelling,
   onClose, onSelectReason, onCustomReasonChange, onConfirm
 }: CancelModalProps) {
-  const [quote, setQuote] = React.useState<{ penalty: number; reason: string; grace_remaining_seconds?: number } | null>(null);
-  const [loadingQuote, setLoadingQuote] = React.useState(false);
+  const [quote, setQuote] = useState<{ penalty: number; reason: string; grace_remaining_seconds?: number } | null>(null);
+  const [loadingQuote, setLoadingQuote] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (visible && bookingId) {
       fetchQuote();
     } else {
       setQuote(null);
     }
-  }, [visible, bookingId]);
+  }, [visible, bookingId, fetchQuote]);
 
-  const fetchQuote = async () => {
+  const fetchQuote = useCallback(async () => {
     setLoadingQuote(true);
     try {
-      const { api } = require('../../lib/api');
       const res = await api.get(`/api/v1/bookings/${bookingId}/cancellation-quote`);
       if (res.data) {
         setQuote(res.data);
@@ -50,7 +50,7 @@ export default function CancelModal({
     } finally {
       setLoadingQuote(false);
     }
-  };
+  }, [bookingId]);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.modalOverlay}>

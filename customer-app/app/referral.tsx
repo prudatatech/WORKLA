@@ -27,7 +27,6 @@ const PRIMARY = '#1A3FFF';
 export default function ReferralScreen() {
     const router = useRouter();
     const [profile, setProfile] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
     const [copied, setCopied] = useState(false);
 
     useEffect(() => {
@@ -40,7 +39,6 @@ export default function ReferralScreen() {
                 .eq('id', user.id)
                 .single();
             setProfile(data);
-            setLoading(false);
         })();
     }, []);
 
@@ -67,7 +65,7 @@ export default function ReferralScreen() {
                 message: `Join me on Workla — India's best home services app! Use my referral code **${referralCode}** and get ₹50 off your first booking.\n\n${referralLink}`,
                 title: 'Join Workla with my code!',
             });
-        } catch (e) {
+        } catch {
             Alert.alert('Could not share', 'Please try again.');
         }
     };

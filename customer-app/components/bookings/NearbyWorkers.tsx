@@ -17,7 +17,6 @@ interface WorkerOffer {
 }
 
 export default function NearbyWorkers({ offers }: { offers: WorkerOffer[] }) {
-  const scrollX = useRef(new Animated.Value(0)).current;
 
   // Pulse animation for the "Connecting" status
   const pulseAnim = useRef(new Animated.Value(1)).current;

@@ -66,6 +66,7 @@ export default function TrackingScreen() {
     const router = useRouter();
     const mapRef = useRef<MapView>(null);
     const pulseAnim = useRef(new Animated.Value(1)).current;
+    const receiptAnim = useRef(new Animated.Value(0)).current;
 
     const [loading, setLoading] = useState(true);
     const [booking, setBooking] = useState<any>(null);
@@ -90,6 +91,12 @@ export default function TrackingScreen() {
             ])
         ).start();
     }, [pulseAnim]);
+
+    useEffect(() => {
+        if (booking?.status === 'completed') {
+            Animated.spring(receiptAnim, { toValue: 1, useNativeDriver: true, tension: 50, friction: 7 }).start();
+        }
+    }, [booking?.status]);
 
     const updateETA = useCallback((pLat: number, pLng: number) => {
         const b = bookingRef.current;
@@ -197,20 +204,28 @@ export default function TrackingScreen() {
         }
     }, [id, updateETA]);
 
+    const offersRef = useRef<any[]>([]);
+
+    useEffect(() => {
+        offersRef.current = offers;
+    }, [offers]);
+
     useEffect(() => {
         if (id) loadBooking();
-    }, [id]); // Only run on mount or if ID changes
+    }, [id, loadBooking]); // Only run on mount or if ID changes
 
     useEffect(() => {
-        const isSearching = booking ? ['requested', 'searching'].includes(booking.status) : true;
-        if (!id || !isSearching) return;
+        const isTrackingActive = booking ? ['requested', 'searching', 'confirmed', 'en_route', 'arrived', 'in_progress'].includes(booking.status) : true;
+        if (!id || !isTrackingActive) return;
 
+        // Fallback polling: 10s for searching, 15s for others
+        const intervalTime = ['requested', 'searching'].includes(booking?.status) ? 8000 : 15000;
         const interval = setInterval(() => {
             loadBooking(false, true); 
-        }, 15000);
+        }, intervalTime);
 
         return () => clearInterval(interval);
-    }, [id, booking, loadBooking]);
+    }, [id, booking?.status, loadBooking]);
 
     useEffect(() => {
         if (!booking || !['requested', 'searching'].includes(booking.status)) return;
@@ -232,23 +247,34 @@ export default function TrackingScreen() {
 
     useEffect(() => {
         if (!id) return;
+        console.log('[Real-time 🛰️] Connecting status channel for:', id);
+        
         const channel = supabase
             .channel(`booking-status-${id}`)
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bookings', filter: `id=eq.${id}` }, (payload) => {
-                console.log('[Real-time 🚀] Status update:', payload.new.status);
-                
+                console.log('[Real-time 🚀] Status update received:', payload.new.status);
                 const newBooking = payload.new as any;
                 if (!newBooking) return;
-                
+
+                // 🚀 SPEED OPTIMIZATION: Faster transition for completion
+                if (newBooking.status === 'completed') {
+                    LayoutAnimation.configureNext(LayoutAnimation.Presets.spring);
+                    setBooking((prev: any) => ({ ...prev, ...newBooking }));
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    setShowProviderFound(false);
+                    // Background refresh faster for completed jobs to get final billing details
+                    setTimeout(() => loadBooking(false, true), 300);
+                    return;
+                }
+
                 LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                 setBooking((prev: any) => ({ ...prev, ...newBooking }));
 
                 if (newBooking.status === 'confirmed') {
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                     
-                    // 🚀 SPEED OPTIMIZATION: Try to find the provider name in our existing offers list 
-                    // so we don't have to wait for the API refresh to show "Partner Found Kushagra..."
-                    const matchingOffer = offers.find(o => o.provider_id === newBooking.provider_id);
+                    // 🚀 SPEED OPTIMIZATION: Use offersRef to avoid dependency on 'offers' state
+                    const matchingOffer = offersRef.current.find(o => o.provider_id === newBooking.provider_id);
                     if (matchingOffer) {
                         const name = matchingOffer.provider_details?.profiles?.full_name || 
                                      matchingOffer.provider_details?.business_name;
@@ -262,28 +288,37 @@ export default function TrackingScreen() {
                     }
                     
                     setShowProviderFound(true);
-                    // ⏲️ Auto-dismiss after 8s to show map automatically
+                    // ⏲️ Auto-dismiss after 4s
                     setTimeout(() => setShowProviderFound(false), 4000);
                 }
 
-                if (['en_route', 'arrived', 'in_progress', 'completed'].includes(newBooking.status)) {
+                if (['en_route', 'arrived', 'in_progress'].includes(newBooking.status)) {
                     setShowProviderFound(false);
                     
-                    // 📳 Production-level Haptics
                     if (newBooking.status === 'arrived') {
                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                     } else if (newBooking.status === 'in_progress') {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    } else if (payload.new.status === 'completed') {
-                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                     }
                 }
 
-                // 2. Full refresh of joins (profiles, ratings) in background
-                // We use a slight delay to allow the backend to finish billing calculations
-                setTimeout(() => loadBooking(false, true), 600);
+                // Background refresh for all other status updates
+                setTimeout(() => loadBooking(false, true), 800);
+
             })
-            .subscribe();
+            .subscribe((status) => {
+                console.log(`[Real-time 🛰️] Channel status for ${id}:`, status);
+            });
+
+        return () => {
+            console.log('[Real-time 🛰️] Removing status channel for:', id);
+            supabase.removeChannel(channel);
+        };
+    }, [id, loadBooking]); // Removed 'offers' dependency
+
+    useEffect(() => {
+        if (!id) return;
+        console.log('[Real-time 💰] Connecting offers channel for:', id);
 
         const offerChannel = supabase
             .channel(`booking-offers-${id}`)
@@ -293,7 +328,9 @@ export default function TrackingScreen() {
                     if (newOffer) setOffers(prev => [...prev.filter(o => o.id !== newOffer.id), newOffer]);
                 } else if (payload.eventType === 'UPDATE') {
                     const updatedOffer = payload.new as any;
-                    if (updatedOffer.status === 'rejected' || updatedOffer.status === 'expired') setOffers(prev => prev.filter(o => o.id !== updatedOffer.id));
+                    if (updatedOffer.status === 'rejected' || updatedOffer.status === 'expired') {
+                        setOffers(prev => prev.filter(o => o.id !== updatedOffer.id));
+                    }
                 }
             })
             .subscribe();
@@ -303,11 +340,12 @@ export default function TrackingScreen() {
         });
 
         return () => {
-            supabase.removeChannel(channel);
+            console.log('[Real-time 💰] Removing offers channel for:', id);
             supabase.removeChannel(offerChannel);
             subscription.remove();
         };
-    }, [id, loadBooking, offers]);
+    }, [id]); // Independent from status subscription and offers state
+
 
     // 🗺️ Zoom map when overlay is dismissed
     useEffect(() => {
@@ -324,7 +362,7 @@ export default function TrackingScreen() {
                 }, 500);
             }
         }
-    }, [showProviderFound, providerLocation, booking?.customer_latitude]);
+    }, [showProviderFound, providerLocation, booking?.customer_latitude, booking?.customer_longitude, booking?.status]);
 
     useEffect(() => {
         if (!id) return;
@@ -407,7 +445,7 @@ export default function TrackingScreen() {
             } else {
                 throw new Error('MISSING_URL');
             }
-        } catch (err) {
+        } catch {
             Alert.alert('Error', 'Failed to fetch the invoice link. Please try again later.');
         } finally {
             setInvoiceLoading(false);
@@ -427,7 +465,7 @@ export default function TrackingScreen() {
                         }]);
                     }
                     Alert.alert('🆘 SOS ACTIVE', 'Our high-priority safety team has been alerted. Assistance is on the way.');
-                } catch (err) { Alert.alert('🆘 SOS ACTIVE', 'Emergency alert broadcasted via fallback satellite network.'); }
+                } catch { Alert.alert('🆘 SOS ACTIVE', 'Emergency alert broadcasted via fallback satellite network.'); }
             }},
         ]);
     };
@@ -491,7 +529,7 @@ export default function TrackingScreen() {
                                 <TouchableOpacity onPress={handleShare}><Share2 size={20} color={PRIMARY} /></TouchableOpacity>
                             </View>
                         </SafeAreaView>
-                        <View style={styles.receiptMain}>
+                        <Animated.View style={[styles.receiptMain, { opacity: receiptAnim, transform: [{ scale: receiptAnim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) }] }]}>
                             <View style={styles.successIconBox}><Check size={32} color="#FFF" /></View>
                             <Text style={styles.receiptServiceTitle}>{booking.service_name_snapshot}</Text>
                             <Text style={styles.receiptBookingId}>Booking #{booking.booking_number || booking.id.slice(0,8).toUpperCase()}</Text>
@@ -515,7 +553,7 @@ export default function TrackingScreen() {
                                     {invoiceLoading ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><ActivityIndicator color="#FFF" size="small" /><Text style={styles.downloadBtnText}>Generating...</Text></View> : <Text style={styles.downloadBtnText}>Download Invoice</Text>}
                                 </TouchableOpacity>
                             </View>
-                        </View>
+                        </Animated.View>
                     </ScrollView>
                 </View>
             ) : booking.status === 'cancelled' && booking.cancellation_reason?.includes('No worker found') ? (

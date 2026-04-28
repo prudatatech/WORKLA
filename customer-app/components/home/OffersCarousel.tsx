@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Banner } from '../BannerCarousel';
 import { PRIMARY } from '../../lib/ui-constants';
@@ -12,16 +12,13 @@ interface OffersCarouselProps {
 export default function OffersCarousel({ banners, loading }: OffersCarouselProps) {
   const router = useRouter();
   const offersScrollRef = useRef<ScrollView>(null);
-  const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+  const bannerIndex = useRef(0);
 
   useEffect(() => {
     if (banners.length <= 1) return;
     const interval = setInterval(() => {
-      setCurrentBannerIndex(prev => {
-        const next = (prev + 1) % banners.length;
-        offersScrollRef.current?.scrollTo({ x: next * (260 + 12), animated: true });
-        return next;
-      });
+      bannerIndex.current = (bannerIndex.current + 1) % banners.length;
+      offersScrollRef.current?.scrollTo({ x: bannerIndex.current * (260 + 12), animated: true });
     }, 4000);
     return () => clearInterval(interval);
   }, [banners]);

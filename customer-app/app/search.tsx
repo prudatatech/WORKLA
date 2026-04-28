@@ -5,7 +5,6 @@ import { ChevronLeft, ChevronRight, Clock, Search, X } from 'lucide-react-native
 import React, { useEffect, useState } from 'react';
 import {
     Dimensions,
-    Image,
     ScrollView,
     StyleSheet,
     Text,
@@ -20,41 +19,8 @@ import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { PRIMARY, getBgForCategory, getColorForCategory, getIconForCategory } from '../lib/ui-constants';
 const RECENT_SEARCHES_KEY = '@workla_recent_searches';
-
 const { width } = Dimensions.get('window');
 
-function ServiceCategoryImage({ imageUrl, slug, size, borderRadius }: {
-    imageUrl?: string;
-    slug: string;
-    size: number;
-    borderRadius: number;
-}) {
-    const [imgError, setImgError] = useState(false);
-    const IconComponent = getIconForCategory(slug);
-    const bg = getBgForCategory(slug);
-    const color = getColorForCategory(slug);
-
-    if (imageUrl && !imgError) {
-        return (
-            <View style={{ width: size, height: size, borderRadius, overflow: 'hidden' }}>
-                <Image
-                    source={{ uri: imageUrl }}
-                    style={{ width: size, height: size }}
-                    onError={() => setImgError(true)}
-                    resizeMode="cover"
-                />
-            </View>
-        );
-    }
-    return (
-        <View style={{
-            width: size, height: size, borderRadius,
-            backgroundColor: bg, justifyContent: 'center', alignItems: 'center'
-        }}>
-            <IconComponent color={color} size={size * 0.45} />
-        </View>
-    );
-}
 
 export default function SearchScreen() {
     const router = useRouter();
@@ -62,7 +28,6 @@ export default function SearchScreen() {
     const [results, setResults] = useState<any[]>([]);
     const [recentSearches, setRecentSearches] = useState<string[]>([]);
     const [allServices, setAllServices] = useState<any[]>([]);
-    const [_loading, setLoading] = useState(false);
 
     useEffect(() => {
         loadInitialData();
@@ -86,7 +51,7 @@ export default function SearchScreen() {
         // const { data: subs } = await supabase...;
     };
 
-    const searchTimeout = React.useRef<NodeJS.Timeout | null>(null);
+    const searchTimeout = React.useRef<any>(null);
 
     const handleSearch = (text: string) => {
         setSearchText(text);
@@ -100,7 +65,6 @@ export default function SearchScreen() {
         if (searchTimeout.current) clearTimeout(searchTimeout.current);
         
         searchTimeout.current = setTimeout(async () => {
-            setLoading(true);
             try {
                 // Get location for geo-ranked search
                 const loc = await Location.getLastKnownPositionAsync({});
@@ -111,7 +75,6 @@ export default function SearchScreen() {
                     setResults(res.data);
                 }
             } finally {
-                setLoading(false);
             }
         }, 300);
     };

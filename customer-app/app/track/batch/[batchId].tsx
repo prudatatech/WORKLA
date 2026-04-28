@@ -47,17 +47,36 @@ export default function BatchTrackScreen() {
   // Realtime status updates
   useEffect(() => {
     if (!batchId || bookings.length === 0) return;
+    
+    // We only want to subscribe to the bookings once
     const bookingIds = bookings.map(b => b.id);
+    console.log('[Batch Real-time 🛰️] Subscribing to:', bookingIds);
+
     const channels = bookingIds.map(id =>
       supabase
         .channel(`batch-booking-${id}`)
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bookings', filter: `id=eq.${id}` }, (payload) => {
+          console.log('[Batch Real-time 🚀] Update for:', id, payload.new.status);
           setBookings(prev => prev.map(b => b.id === id ? { ...b, ...payload.new } : b));
         })
         .subscribe()
     );
-    return () => { channels.forEach(c => supabase.removeChannel(c)); };
-  }, [batchId, bookings]);
+
+    return () => { 
+      console.log('[Batch Real-time 🛰️] Cleaning up channels');
+      channels.forEach(c => supabase.removeChannel(c)); 
+    };
+  }, [batchId]); // Independent of 'bookings' state changes
+
+  // Fallback Polling
+  useEffect(() => {
+    if (!batchId) return;
+    const interval = setInterval(() => {
+      load();
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [batchId, load]);
+
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>

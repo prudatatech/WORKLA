@@ -183,7 +183,7 @@ export default function ChatScreen() {
                     content: trimmed,
                     tempId // Pass correlation ID to backend
                 });
-            } catch (_err) {
+            } catch {
                 setMessages(curr => curr.filter(m => m.id !== tempId));
                 setText(trimmed);
             } finally {

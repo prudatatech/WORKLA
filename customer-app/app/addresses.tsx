@@ -224,7 +224,7 @@ export default function AddressBookScreen() {
                         lat = geoHits[0].latitude;
                         lng = geoHits[0].longitude;
                     }
-                } catch (_e) { console.warn("Could not geocode address"); }
+                } catch { console.warn("Could not geocode address"); }
             }
 
             const payload = {
