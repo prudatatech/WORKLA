@@ -1,4 +1,5 @@
 import * as Haptics from 'expo-haptics';
+import * as Location from 'expo-location';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Clock } from 'lucide-react-native';
 import NetInfo from '@react-native-community/netinfo';
@@ -17,6 +18,19 @@ import { localCache } from '../../lib/localCache';
 import { supabase } from '../../lib/supabase';
 
 import { enqueueAction } from '../../lib/syncQueue';
+
+// 🗺️ Geofence: Haversine distance in meters between two GPS coordinates
+const getDistanceMeters = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371000; // Earth radius in meters
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const ARRIVAL_RADIUS_METERS = 500; // Provider must be within 500m to mark arrived
 
 const JobsEmptyImg = require('../../assets/images/bookings-empty.png');
 
@@ -247,6 +261,66 @@ export default function MyJobsScreen() {
 
   const confirmAndAdvance = async (job: any, nextStatus: string, nextLabel: string) => {
     if (job.status === 'confirmed' && nextStatus === 'en_route') handleNavigate(job);
+
+    // 🗺️ Geofence Check: Provider must be near customer to mark "arrived"
+    if (nextStatus === 'arrived') {
+      const custLat = job.customer_latitude;
+      const custLng = job.customer_longitude;
+
+      if (custLat && custLng) {
+        setActionLoading(job.id);
+        try {
+          const { status: permStatus } = await Location.requestForegroundPermissionsAsync();
+          if (permStatus !== 'granted') {
+            Alert.alert('Location Required', 'Please enable location access to verify your arrival at the customer location.');
+            setActionLoading(null);
+            return;
+          }
+
+          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+          const distMeters = getDistanceMeters(loc.coords.latitude, loc.coords.longitude, custLat, custLng);
+
+          if (distMeters > ARRIVAL_RADIUS_METERS) {
+            const distKm = (distMeters / 1000).toFixed(1);
+            setActionLoading(null);
+            Alert.alert(
+              '📍 Too Far Away',
+              `You are ${distKm} km away from the customer. You need to be within ${ARRIVAL_RADIUS_METERS}m to mark as arrived.\n\nPlease continue navigating to the customer's location.`,
+              [
+                { text: 'Navigate', onPress: () => handleNavigate(job) },
+                {
+                  text: 'Override',
+                  style: 'destructive',
+                  onPress: () => advanceStatus(job, nextStatus)
+                },
+              ]
+            );
+            return;
+          }
+
+          // Within radius — proceed
+          setActionLoading(null);
+          advanceStatus(job, nextStatus);
+          return;
+        } catch (locErr: any) {
+          console.error('[Geofence] Location check failed:', locErr.message);
+          setActionLoading(null);
+          // If GPS fails, allow with warning
+          Alert.alert(
+            'Location Unavailable',
+            'Could not verify your location. Are you at the customer location?',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Yes, I\'m Here', onPress: () => advanceStatus(job, nextStatus) },
+            ]
+          );
+          return;
+        }
+      }
+      // No customer coords — skip geofence, proceed normally
+      advanceStatus(job, nextStatus);
+      return;
+    }
 
     // ⚡ One-Tap Workflow: Start Job immediately triggers camera
     if (nextStatus === 'in_progress') {
